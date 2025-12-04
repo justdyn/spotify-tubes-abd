@@ -173,7 +173,7 @@ CREATE INDEX idx_team_players_season ON team_players(season_start, season_end);
 
 -- Table: games
 -- Purpose: Store match information (central fact table)
--- Improvement: Added game_week, stadium, attendance, status, updated_at
+-- Improvement: Added game_week, stadium, status, updated_at
 CREATE TABLE games (
     game_id SERIAL PRIMARY KEY,
     league_id INTEGER NOT NULL,
@@ -215,7 +215,6 @@ CREATE TABLE games (
         (home_probability IS NULL OR draw_probability IS NULL OR away_probability IS NULL) OR
         (ABS((home_probability + draw_probability + away_probability) - 1.0) < 0.01)
     ),
-    CONSTRAINT chk_attendance_valid CHECK (attendance IS NULL OR attendance >= 0),
     CONSTRAINT chk_status_valid CHECK (status IN ('scheduled', 'in_progress', 'completed', 'postponed', 'cancelled')),
     
     -- Foreign Keys
@@ -235,7 +234,6 @@ COMMENT ON COLUMN games.game_id IS 'Auto-generated primary key';
 COMMENT ON COLUMN games.season IS 'Season year (start year of season)';
 COMMENT ON COLUMN games.game_week IS 'Match week/round number in the season';
 COMMENT ON COLUMN games.status IS 'Current status of the match';
-COMMENT ON COLUMN games.attendance IS 'Number of spectators at the match';
 
 -- Strategic Indexes for games table
 CREATE INDEX idx_games_league_season ON games(league_id, season);
@@ -606,7 +604,7 @@ SELECT
     END AS winner,
     g.home_probability,
     g.draw_probability,
-    g.away_probability,
+    g.away_probability
 FROM games g
 JOIN leagues l ON g.league_id = l.league_id
 JOIN teams ht ON g.home_team_id = ht.team_id
@@ -621,7 +619,6 @@ CREATE OR REPLACE VIEW v_player_stats_summary AS
 SELECT 
     p.player_id,
     p.name AS player_name,
-    p.nationality,
     COUNT(DISTINCT a.game_id) AS games_played,
     SUM(a.goals) AS total_goals,
     SUM(a.assists) AS total_assists,
@@ -654,7 +651,7 @@ SELECT
     ROUND(AVG(ts.x_goals)::numeric, 2) AS avg_x_goals,
     SUM(ts.shots) AS total_shots,
     SUM(ts.shots_on_target) AS total_shots_on_target,
-    ROUND((SUM(ts.shots_on_target)::numeric / NULLIF(SUM(ts.shots), 0) * 100), 2) AS shot_accuracy_pct,
+    ROUND((SUM(ts.shots_on_target)::numeric / NULLIF(SUM(ts.shots), 0) * 100), 2) AS shot_accuracy_pct
 FROM teams t
 LEFT JOIN team_stats ts ON t.team_id = ts.team_id
 LEFT JOIN leagues l ON t.league_id = l.league_id
@@ -734,13 +731,17 @@ SELECT
     l.name AS league_name,
     a.player_id,
     p.name AS player_name,
-    p.nationality,
+    COUNT(DISTINCT a.game_id) AS games_played,
+    SUM(a.goals) AS total_goals,
+    SUM(a.assists) AS total_assists,
+    ROUND((SUM(a.goals)::numeric / NULLIF(SUM(a.time_played), 0) * 90), 2) AS goals_per_90,
+    ROUND(AVG(a.x_goals)::numeric, 2) AS avg_x_goals
 FROM appearances a
 JOIN games g ON a.game_id = g.game_id
 JOIN players p ON a.player_id = p.player_id
 JOIN leagues l ON g.league_id = l.league_id
 WHERE g.status = 'completed'
-GROUP BY g.season, g.league_id, l.name, a.player_id, p.name, p.nationality
+GROUP BY g.season, g.league_id, l.name, a.player_id, p.name;
 
 COMMENT ON MATERIALIZED VIEW mv_top_scorers IS 'Top goal scorers by season and league';
 
@@ -963,7 +964,7 @@ KEY IMPROVEMENTS FROM v1.0:
 4. Data Integrity Triggers: Automatic validation of team participation in games
 5. Soft Deletes: Added is_active flags to prevent data loss
 6. Better Normalization: Added league_id to teams, team_id to appearances/shots
-7. Additional Metadata: Added nationality, date_of_birth, stadium, attendance, game_week
+7. Additional Metadata: Added nationality, date_of_birth, stadium, game_week
 8. Improved Constraints: Better validation rules and unique constraints
 9. Helper Functions: Added get_team_form(), get_head_to_head() for common queries
 10. Future-Proof Design: Comments on partitioning strategy for scalability
@@ -1018,7 +1019,7 @@ ANALYZE;
 \echo '  - teams (with league_id, short_name, is_active)'
 \echo '  - players (with date_of_birth, nationality, is_active)'
 \echo '  - team_players (NEW: tracks transfers and player history)'
-\echo '  - games (with game_week, stadium, attendance, status)'
+\echo '  - games (with game_week, stadium, status)'
 \echo '  - team_stats (with possession_percentage, ENUM types)'
 \echo '  - appearances (with team_id, improved constraints)'
 \echo '  - shots (with team_id, ENUM types)'

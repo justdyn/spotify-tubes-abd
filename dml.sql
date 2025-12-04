@@ -142,11 +142,10 @@ JOIN league_id_mapping lidm ON g.league_id = lidm.old_league_id;
 
 -- Insert teams with league assignment
 -- Note: team_id is SERIAL, but we preserve CSV IDs for mapping via the mapping table
-INSERT INTO teams (league_id, name, short_name, is_active)
+INSERT INTO teams (league_id, name, is_active)
 SELECT DISTINCT
     tlm.league_id,
     tlm.team_name,
-    NULL AS short_name,  -- Can be populated later if needed
     true AS is_active
 FROM team_league_mapping tlm
 ON CONFLICT (league_id, name) DO NOTHING;
@@ -179,14 +178,12 @@ CREATE TEMP TABLE players_temp (
 -- Import players CSV
 \copy players_temp FROM 'players.csv' WITH (FORMAT CSV, HEADER true, DELIMITER ',');
 
--- Insert players (without date_of_birth and nationality - can be added later)
+-- Insert players
 -- Note: player_id is SERIAL, but we preserve CSV IDs for mapping
-INSERT INTO players (player_id, name, date_of_birth, nationality, is_active)
+INSERT INTO players (player_id, name, is_active)
 SELECT 
     playerID,
     name,
-    NULL AS date_of_birth,  -- Can be populated from external sources later
-    NULL AS nationality,     -- Can be populated from external sources later
     true AS is_active
 FROM players_temp
 ON CONFLICT (player_id) DO UPDATE SET name = EXCLUDED.name;
@@ -208,7 +205,7 @@ INSERT INTO games (
     home_goals, away_goals,
     home_probability, draw_probability, away_probability,
     home_goals_half_time, away_goals_half_time,
-    stadium, attendance, status
+    status
 )
 SELECT 
     gt."gameID",
@@ -225,8 +222,6 @@ SELECT
     gt."awayProbability",
     gt."homeGoalsHalfTime",
     gt."awayGoalsHalfTime",
-    NULL AS stadium,  -- Not available in CSV
-    NULL AS attendance,  -- Not available in CSV
     'completed' AS status  -- Assume all games in CSV are completed
 FROM games_temp gt
 JOIN league_id_mapping lidm ON gt."leagueID" = lidm.old_league_id
@@ -285,8 +280,7 @@ CREATE TEMP TABLE team_stats_temp (
 INSERT INTO team_stats (
     game_id, team_id, location, goals, x_goals,
     shots, shots_on_target, deep_passes, ppda,
-    fouls, corners, yellow_cards, red_cards, result,
-    possession_percentage
+    fouls, corners, yellow_cards, red_cards, result
 )
 SELECT 
     gim.new_game_id AS game_id,
@@ -319,8 +313,7 @@ SELECT
         WHEN tst."result" = 'D' THEN 'draw'::result_type
         WHEN tst."result" = 'L' THEN 'loss'::result_type
         ELSE 'draw'::result_type  -- Default fallback
-    END AS result,
-    NULL AS possession_percentage  -- Not available in CSV
+    END AS result
 FROM team_stats_temp tst
 JOIN game_id_mapping gim ON tst."gameID" = gim.old_game_id
 JOIN team_id_mapping tim ON tst."teamID" = tim.old_team_id
@@ -370,7 +363,7 @@ INSERT INTO appearances (
     assists, key_passes, x_assists,
     position, position_order,
     yellow_card, red_card,
-    time_played, substitute_in, substitute_out
+    time_played
 )
 SELECT 
     gim.new_game_id AS game_id,
@@ -405,27 +398,7 @@ SELECT
     at."positionOrder" AS position_order,
     CASE WHEN at."yellowCard" > 0 THEN true ELSE false END AS yellow_card,
     CASE WHEN at."redCard" > 0 THEN true ELSE false END AS red_card,
-    at."time" AS time_played,
-    -- Validate substitute_in: must be numeric, 0-120 range, and fit in SMALLINT
-    CASE 
-        WHEN at."substituteIn" IS NULL OR at."substituteIn" = '' OR at."substituteIn" = '0'
-        THEN NULL
-        WHEN at."substituteIn" ~ '^\d+$' 
-        AND LENGTH(at."substituteIn") <= 3  -- Max 3 digits (0-120)
-        AND (at."substituteIn"::INTEGER BETWEEN 1 AND 120)  -- Valid minute range
-        THEN at."substituteIn"::SMALLINT 
-        ELSE NULL  -- Invalid values (too large, non-numeric, etc.) become NULL
-    END AS substitute_in,
-    -- Validate substitute_out: must be numeric, 0-120 range, and fit in SMALLINT
-    CASE 
-        WHEN at."substituteOut" IS NULL OR at."substituteOut" = '' OR at."substituteOut" = '0'
-        THEN NULL
-        WHEN at."substituteOut" ~ '^\d+$' 
-        AND LENGTH(at."substituteOut") <= 3  -- Max 3 digits (0-120)
-        AND (at."substituteOut"::INTEGER BETWEEN 1 AND 120)  -- Valid minute range
-        THEN at."substituteOut"::SMALLINT 
-        ELSE NULL  -- Invalid values (too large, non-numeric, etc.) become NULL
-    END AS substitute_out
+    at."time" AS time_played
 FROM appearances_temp at
 JOIN game_id_mapping gim ON at."gameID" = gim.old_game_id
 ON CONFLICT (game_id, player_id) DO UPDATE SET

@@ -211,7 +211,6 @@ def get_top_scorers(league_id, season, limit=20):
     query = """
     SELECT 
         player_name,
-        nationality,
         games_played,
         total_goals,
         total_assists,
