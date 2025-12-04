@@ -78,10 +78,90 @@ st.markdown("""
         color: #34495e;
     }
     
-    /* Sidebar */
+    /* Sidebar - Modern, premium, non-white background + refined typography */
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700;800&display=swap');
+
     section[data-testid="stSidebar"] {
-        background-color: #f8f9fa;
+        background: linear-gradient(180deg, #071233 0%, #0b2f56 100%);
+        color: #e6f0fb;
+        font-family: 'Manrope', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        letter-spacing: 0.2px;
+        padding: 14px 12px 18px 12px;
+        border-radius: 12px;
+        box-shadow: 0 8px 30px rgba(9, 18, 35, 0.6);
+        transition: width .36s cubic-bezier(.2,.9,.3,1), padding .28s ease, transform .28s ease;
+        min-width: 260px;
     }
+
+    /* Collapsed variant will be injected conditionally from Python (min-width override) */
+
+    /* Sidebar header */
+    section[data-testid="stSidebar"] .sidebar-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 4px 12px 4px;
+    }
+
+    section[data-testid="stSidebar"] .sidebar-brand {
+        font-size: 18px;
+        font-weight: 700;
+        color: #eaf6ff;
+        margin: 0;
+        letter-spacing: 0.6px;
+    }
+
+    /* Nav button styling (limited to sidebar area) */
+    section[data-testid="stSidebar"] .stButton>button {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: transparent;
+        border: none;
+        color: inherit;
+        padding: 10px 12px;
+        font-weight: 600;
+        font-size: 15px;
+        line-height: 1;
+        border-radius: 10px;
+        justify-content: flex-start;
+        transition: background .18s ease, transform .08s ease, color .15s ease;
+        letter-spacing: 0.4px;
+    }
+
+    section[data-testid="stSidebar"] .stButton>button:hover {
+        background: rgba(255,255,255,0.04);
+        transform: translateX(4px);
+    }
+
+    section[data-testid="stSidebar"] .nav-icon {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #cfe8ff;
+    }
+
+    /* Ensure inline svgs use currentColor so icons are monochrome and elegant */
+    section[data-testid="stSidebar"] .nav-icon svg{stroke:currentColor; fill:none}
+
+    section[data-testid="stSidebar"] .muted {
+        color: #b7d6f8;
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: 0.3px;
+    }
+
+    /* Small helper to visually separate groups */
+    section[data-testid="stSidebar"] .group-sep { margin: 10px 0; height:1px; background: rgba(255,255,255,0.03); border-radius:2px }
+
+    /* Footer area in sidebar */
+    section[data-testid="stSidebar"] .sidebar-foot { margin-top: 12px; color: #9fbfe6; font-size:12px }
+
     
     /* Tables */
     .dataframe {
@@ -851,28 +931,28 @@ def main():
     """Main application function"""
     
     # Header
-    st.title("⚽ European Top 5 Football Leagues Dashboard")
+    st.title("European Top 5 Football Leagues Dashboard")
     st.markdown("*Interactive analysis of Premier League, La Liga, Bundesliga, Serie A, and Ligue 1*")
     st.markdown("---")
     
     # Sidebar
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/000000/football2--v1.png", width=80)
-        st.title("🎯 Navigation")
+        st.title("Navigation")
         
         page = st.radio(
             "Select View",
-            ["📊 Overview", "🏆 League Analysis", "👤 Player Statistics", 
-             "📈 Advanced Analytics", "🗺️ Geographic Analysis", "🔍 Database Explorer"],
+            ["Overview", "League Analysis", "Player Statistics", 
+             "Advanced Analytics", "Database Explorer"],
             label_visibility="collapsed"
         )
         
         st.markdown("---")
-        st.info("💡 **Tip**: Hover over charts for detailed information!")
+        st.info("**Tip**: Hover over charts for detailed information!")
         
         # Database status
         st.markdown("---")
-        st.subheader("🔌 Database Status")
+        st.subheader("Database Status")
         try:
             conn = get_database_connection()
             st.success("✅ Connected")
@@ -883,7 +963,7 @@ def main():
     # PAGE: OVERVIEW
     # ========================================================================
     
-    if page == "📊 Overview":
+    if page == "Overview":
         st.header("📊 Database Overview")
         
         # Get overview stats
@@ -979,7 +1059,7 @@ def main():
     # PAGE: LEAGUE ANALYSIS
     # ========================================================================
     
-    elif page == "🏆 League Analysis":
+    elif page == "League Analysis":
         st.header("🏆 League Analysis")
         
         # Filters
@@ -1090,7 +1170,7 @@ def main():
     # PAGE: PLAYER STATISTICS
     # ========================================================================
     
-    elif page == "👤 Player Statistics":
+    elif page == "Player Statistics":
         st.header("👤 Player Statistics")
         
         # Filters
@@ -1188,7 +1268,7 @@ def main():
     # PAGE: ADVANCED ANALYTICS
     # ========================================================================
     
-    elif page == "📈 Advanced Analytics":
+    elif page == "Advanced Analytics":
         st.header("📈 Advanced Analytics")
         
         # Filters
@@ -1310,248 +1390,10 @@ def main():
             st.caption("🟢 Positive values indicate overperformance | 🔴 Negative values indicate underperformance")
     
     # ========================================================================
-    # PAGE: GEOGRAPHIC ANALYSIS
-    # ========================================================================
-    
-    elif page == "🗺️ Geographic Analysis":
-        st.header("🗺️ Geographic Analysis")
-        st.markdown("*Explore the geographic distribution of teams and players across Europe*")
-        
-        st.markdown("---")
-        
-        # European Leagues Map
-        st.subheader("🌍 European Top 5 Leagues Distribution")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            fig = plot_leagues_choropleth()
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.markdown("#### 📍 League Countries")
-            leagues = get_leagues()
-            if not leagues.empty:
-                for idx, row in leagues.iterrows():
-                    st.markdown(f"**{row['name']}**")
-                    st.caption(f"🌍 {row['country']}")
-                    st.markdown("---")
-        
-        st.markdown("---")
-        
-        # Teams Distribution Map
-        st.subheader("⚽ Teams Geographic Distribution")
-        
-        teams_map_data = get_league_teams_map()
-        
-        if not teams_map_data.empty:
-            # Show map
-            fig = plot_teams_map(teams_map_data)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-            
-            st.caption("💡 Bubble size represents total goals scored, color intensity shows number of wins")
-            
-            # Statistics by country
-            st.markdown("---")
-            st.subheader("📊 Statistics by Country")
-            
-            country_stats = get_teams_by_country()
-            
-            if not country_stats.empty:
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Bar chart for teams per country
-                    fig = px.bar(
-                        country_stats,
-                        x='country',
-                        y='team_count',
-                        title='Number of Teams per Country',
-                        labels={'team_count': 'Number of Teams', 'country': 'Country'},
-                        text='team_count',
-                        color='team_count',
-                        color_continuous_scale='Blues'
-                    )
-                    fig.update_traces(textposition='outside')
-                    fig.update_layout(
-                        template='plotly_white',
-                        height=400,
-                        showlegend=False
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                with col2:
-                    # Bar chart for goals per country
-                    fig = px.bar(
-                        country_stats,
-                        x='country',
-                        y='total_goals',
-                        title='Total Goals by Country',
-                        labels={'total_goals': 'Total Goals', 'country': 'Country'},
-                        text='total_goals',
-                        color='total_goals',
-                        color_continuous_scale='Reds'
-                    )
-                    fig.update_traces(textposition='outside')
-                    fig.update_layout(
-                        template='plotly_white',
-                        height=400,
-                        showlegend=False
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # Data table
-                st.markdown("#### 📋 Detailed Country Statistics")
-                st.dataframe(
-                    country_stats.style.format({
-                        'team_count': '{:,}',
-                        'total_matches': '{:,}',
-                        'total_goals': '{:,}'
-                    }),
-                    width='stretch',
-                    hide_index=True
-                )
-        
-        st.markdown("---")
-        
-        # Player Nationalities Map
-        st.subheader("👥 Player Nationalities Distribution")
-        
-        player_nationalities = get_player_nationalities()
-        
-        if not player_nationalities.empty:
-            # Show map
-            fig = plot_player_nationalities_map(player_nationalities)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-            
-            st.caption("💡 Bubble size represents number of players, color intensity shows total goals scored")
-            
-            # Top nationalities
-            st.markdown("---")
-            st.subheader("🌟 Top Player Nationalities")
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                # Bar chart for top nationalities
-                top_nationalities = player_nationalities.head(15)
-                fig = px.bar(
-                    top_nationalities,
-                    x='nationality',
-                    y='player_count',
-                    title='Top 15 Player Nationalities',
-                    labels={'player_count': 'Number of Players', 'nationality': 'Nationality'},
-                    text='player_count',
-                    color='player_count',
-                    color_continuous_scale='Viridis'
-                )
-                fig.update_traces(textposition='outside')
-                fig.update_layout(
-                    template='plotly_white',
-                    height=400,
-                    showlegend=False,
-                    xaxis_tickangle=-45
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                st.markdown("#### 🏆 Top 5 Nationalities")
-                for idx, row in player_nationalities.head(5).iterrows():
-                    st.markdown(f"**{idx+1}. {row['nationality']}**")
-                    st.caption(f"👥 Players: {row['player_count']}")
-                    st.caption(f"⚽ Goals: {row['total_goals']:,}")
-                    st.caption(f"🎯 Assists: {row['total_assists']:,}")
-                    st.markdown("---")
-            
-            # Full table
-            st.markdown("#### 📊 Complete Nationality Statistics")
-            st.dataframe(
-                player_nationalities.style.format({
-                    'player_count': '{:,}',
-                    'total_goals': '{:,}',
-                    'total_assists': '{:,}',
-                    'total_appearances': '{:,}'
-                }),
-                width='stretch',
-                hide_index=True,
-                height=400
-            )
-        
-        st.markdown("---")
-        
-        # Interactive filters for detailed exploration
-        st.subheader("🔍 Detailed Geographic Exploration")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            selected_country = st.selectbox(
-                "Select Country",
-                ['All'] + list(COUNTRY_COORDS.keys())
-            )
-        
-        with col2:
-            view_type = st.selectbox(
-                "View Type",
-                ["Teams Overview", "Player Distribution"]
-            )
-        
-        if selected_country != 'All':
-            if view_type == "Teams Overview":
-                # Show teams from selected country
-                filtered_teams = teams_map_data[teams_map_data['country'] == selected_country]
-                
-                if not filtered_teams.empty:
-                    st.markdown(f"#### ⚽ Teams in {selected_country}")
-                    st.dataframe(
-                        filtered_teams[['team_name', 'league_name', 'matches_played', 'wins', 'total_goals']].style.format({
-                            'matches_played': '{:,}',
-                            'wins': '{:,}',
-                            'total_goals': '{:,}'
-                        }),
-                        width='stretch',
-                        hide_index=True
-                    )
-                    
-                    # Summary metrics
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Total Teams", len(filtered_teams))
-                    with col2:
-                        st.metric("Total Matches", f"{filtered_teams['matches_played'].sum():,}")
-                    with col3:
-                        st.metric("Total Wins", f"{filtered_teams['wins'].sum():,}")
-                    with col4:
-                        st.metric("Total Goals", f"{filtered_teams['total_goals'].sum():,}")
-            
-            else:  # Player Distribution
-                # Show players from selected country
-                filtered_players = player_nationalities[player_nationalities['nationality'] == selected_country]
-                
-                if not filtered_players.empty:
-                    st.markdown(f"#### 👥 Players from {selected_country}")
-                    
-                    row = filtered_players.iloc[0]
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Total Players", f"{row['player_count']:,}")
-                    with col2:
-                        st.metric("Total Goals", f"{row['total_goals']:,}")
-                    with col3:
-                        st.metric("Total Assists", f"{row['total_assists']:,}")
-                    with col4:
-                        st.metric("Appearances", f"{row['total_appearances']:,}")
-                else:
-                    st.info(f"No player data available for {selected_country}")
-    
-    # ========================================================================
     # PAGE: DATABASE EXPLORER
     # ========================================================================
     
-    elif page == "🔍 Database Explorer":
+    elif page == "Database Explorer":
         st.header("🔍 Database Explorer")
         st.markdown("Execute custom SQL queries to explore the database.")
         
