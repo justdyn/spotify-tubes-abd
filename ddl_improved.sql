@@ -77,13 +77,11 @@ CREATE TABLE teams (
     team_id SERIAL PRIMARY KEY,
     league_id INTEGER NOT NULL,
     name VARCHAR(100) NOT NULL,
-    short_name VARCHAR(50),
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT chk_team_name_not_empty CHECK (LENGTH(TRIM(name)) > 0),
-    CONSTRAINT chk_short_name_not_empty CHECK (short_name IS NULL OR LENGTH(TRIM(short_name)) > 0),
     
     -- Foreign Key
     CONSTRAINT fk_teams_league FOREIGN KEY (league_id) 
@@ -96,7 +94,6 @@ CREATE TABLE teams (
 COMMENT ON TABLE teams IS 'Master table for all football teams with league affiliation';
 COMMENT ON COLUMN teams.team_id IS 'Auto-generated primary key';
 COMMENT ON COLUMN teams.league_id IS 'Primary league affiliation';
-COMMENT ON COLUMN teams.short_name IS 'Abbreviated team name for display';
 COMMENT ON COLUMN teams.is_active IS 'Flag to handle team dissolution/relegation without data loss';
 
 -- Index for team searches
@@ -108,36 +105,24 @@ CREATE INDEX idx_teams_name_pattern ON teams(name varchar_pattern_ops);
 
 -- Table: players
 -- Purpose: Store player information
--- Improvement: Added date_of_birth, nationality, updated_at for better analytics
+-- Improvement: Added updated_at for better analytics
 CREATE TABLE players (
     player_id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
-    date_of_birth DATE,
-    nationality VARCHAR(50),
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
-    CONSTRAINT chk_player_name_not_empty CHECK (LENGTH(TRIM(name)) > 0),
-    CONSTRAINT chk_date_of_birth_valid CHECK (
-        date_of_birth IS NULL OR 
-        (date_of_birth >= '1950-01-01' AND date_of_birth <= CURRENT_DATE - INTERVAL '14 years')
-    ),
-    CONSTRAINT chk_nationality_not_empty CHECK (
-        nationality IS NULL OR LENGTH(TRIM(nationality)) > 0
-    )
+    CONSTRAINT chk_player_name_not_empty CHECK (LENGTH(TRIM(name)) > 0)
 );
 
 COMMENT ON TABLE players IS 'Master table for all football players';
 COMMENT ON COLUMN players.player_id IS 'Auto-generated primary key';
-COMMENT ON COLUMN players.date_of_birth IS 'Player birth date for age calculations';
-COMMENT ON COLUMN players.nationality IS 'Player nationality for analytics';
 COMMENT ON COLUMN players.is_active IS 'Flag to handle retired players without data loss';
 
 -- Index for player searches
 CREATE INDEX idx_players_name ON players(name);
 CREATE INDEX idx_players_name_pattern ON players(name varchar_pattern_ops);
-CREATE INDEX idx_players_nationality ON players(nationality) WHERE nationality IS NOT NULL;
 
 -- ============================================================================
 -- BRIDGE TABLE (Solves many-to-many relationship)
@@ -152,7 +137,6 @@ CREATE TABLE team_players (
     player_id INTEGER NOT NULL,
     season_start SMALLINT NOT NULL,
     season_end SMALLINT,
-    jersey_number SMALLINT,
     is_current BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -161,10 +145,6 @@ CREATE TABLE team_players (
     CONSTRAINT chk_season_end_valid CHECK (
         season_end IS NULL OR 
         (season_end >= season_start AND season_end <= 2100)
-    ),
-    CONSTRAINT chk_jersey_number_valid CHECK (
-        jersey_number IS NULL OR 
-        (jersey_number >= 1 AND jersey_number <= 99)
     ),
     
     -- Foreign Keys
@@ -209,8 +189,6 @@ CREATE TABLE games (
     away_probability DECIMAL(5,4),
     home_goals_half_time SMALLINT,
     away_goals_half_time SMALLINT,
-    stadium VARCHAR(150),
-    attendance INTEGER,
     status VARCHAR(20) NOT NULL DEFAULT 'completed',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -289,7 +267,6 @@ CREATE TABLE team_stats (
     yellow_cards SMALLINT NOT NULL DEFAULT 0,
     red_cards SMALLINT NOT NULL DEFAULT 0,
     result result_type NOT NULL,
-    possession_percentage DECIMAL(5,2),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
@@ -306,10 +283,6 @@ CREATE TABLE team_stats (
     CONSTRAINT chk_cards_reasonable CHECK (yellow_cards <= 11 AND red_cards <= 11),
     CONSTRAINT chk_fouls_reasonable CHECK (fouls IS NULL OR (fouls >= 0 AND fouls <= 50)),
     CONSTRAINT chk_corners_reasonable CHECK (corners IS NULL OR (corners >= 0 AND corners <= 30)),
-    CONSTRAINT chk_possession_valid CHECK (
-        possession_percentage IS NULL OR 
-        (possession_percentage >= 0 AND possession_percentage <= 100)
-    ),
     
     -- Foreign Keys
     CONSTRAINT fk_team_stats_game FOREIGN KEY (game_id) 
@@ -323,7 +296,6 @@ COMMENT ON COLUMN team_stats.location IS 'home or away';
 COMMENT ON COLUMN team_stats.x_goals IS 'Expected goals (xG)';
 COMMENT ON COLUMN team_stats.ppda IS 'Passes per defensive action';
 COMMENT ON COLUMN team_stats.result IS 'win, draw, or loss';
-COMMENT ON COLUMN team_stats.possession_percentage IS 'Ball possession percentage';
 
 -- Indexes for team_stats
 CREATE INDEX idx_team_stats_team ON team_stats(team_id);
@@ -354,8 +326,6 @@ CREATE TABLE appearances (
     yellow_card BOOLEAN NOT NULL DEFAULT false,
     red_card BOOLEAN NOT NULL DEFAULT false,
     time_played SMALLINT NOT NULL DEFAULT 0,
-    substitute_in SMALLINT,
-    substitute_out SMALLINT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
@@ -368,16 +338,6 @@ CREATE TABLE appearances (
         assists >= 0 AND key_passes >= 0 AND time_played >= 0
     ),
     CONSTRAINT chk_time_played_valid CHECK (time_played >= 0 AND time_played <= 120),
-    CONSTRAINT chk_substitute_in_valid CHECK (
-        substitute_in IS NULL OR (substitute_in >= 0 AND substitute_in <= 120)
-    ),
-    CONSTRAINT chk_substitute_out_valid CHECK (
-        substitute_out IS NULL OR (substitute_out >= 0 AND substitute_out <= 120)
-    ),
-    CONSTRAINT chk_substitute_logic CHECK (
-        (substitute_in IS NULL OR substitute_out IS NULL) OR 
-        substitute_in < substitute_out
-    ),
     CONSTRAINT chk_x_goals_non_negative CHECK (
         (x_goals IS NULL OR x_goals >= 0) AND
         (x_goals_chain IS NULL OR x_goals_chain >= 0) AND
@@ -401,8 +361,7 @@ COMMENT ON COLUMN appearances.x_goals IS 'Expected goals for player';
 COMMENT ON COLUMN appearances.x_goals_chain IS 'xG in possession chains involving player';
 COMMENT ON COLUMN appearances.x_goals_buildup IS 'xG in buildup plays involving player';
 COMMENT ON COLUMN appearances.time_played IS 'Minutes played in the match';
-COMMENT ON COLUMN appearances.substitute_in IS 'Minute when player was substituted in';
-COMMENT ON COLUMN appearances.substitute_out IS 'Minute when player was substituted out';
+
 
 -- Indexes for appearances
 CREATE INDEX idx_appearances_player ON appearances(player_id);
@@ -648,8 +607,6 @@ SELECT
     g.home_probability,
     g.draw_probability,
     g.away_probability,
-    g.stadium,
-    g.attendance
 FROM games g
 JOIN leagues l ON g.league_id = l.league_id
 JOIN teams ht ON g.home_team_id = ht.team_id
@@ -665,7 +622,6 @@ SELECT
     p.player_id,
     p.name AS player_name,
     p.nationality,
-    EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.date_of_birth))::INTEGER AS age,
     COUNT(DISTINCT a.game_id) AS games_played,
     SUM(a.goals) AS total_goals,
     SUM(a.assists) AS total_assists,
@@ -678,7 +634,7 @@ SELECT
     ROUND((SUM(a.assists)::numeric / NULLIF(SUM(a.time_played), 0) * 90), 3) AS assists_per_90
 FROM players p
 LEFT JOIN appearances a ON p.player_id = a.player_id
-GROUP BY p.player_id, p.name, p.nationality, p.date_of_birth;
+GROUP BY p.player_id, p.name;
 
 COMMENT ON VIEW v_player_stats_summary IS 'Aggregated player statistics with age and per-90 metrics';
 
@@ -699,7 +655,6 @@ SELECT
     SUM(ts.shots) AS total_shots,
     SUM(ts.shots_on_target) AS total_shots_on_target,
     ROUND((SUM(ts.shots_on_target)::numeric / NULLIF(SUM(ts.shots), 0) * 100), 2) AS shot_accuracy_pct,
-    ROUND(AVG(ts.possession_percentage)::numeric, 2) AS avg_possession_pct
 FROM teams t
 LEFT JOIN team_stats ts ON t.team_id = ts.team_id
 LEFT JOIN leagues l ON t.league_id = l.league_id
@@ -718,7 +673,6 @@ SELECT
     l.name AS league_name,
     tp.season_start,
     tp.season_end,
-    tp.jersey_number,
     tp.is_current,
     COALESCE(tp.season_end, EXTRACT(YEAR FROM CURRENT_DATE)::SMALLINT) - tp.season_start AS seasons_at_team
 FROM team_players tp
@@ -756,8 +710,7 @@ SELECT
     SUM(ts.goals) - SUM(CASE 
         WHEN ts.location = 'home' THEN (SELECT away_goals FROM games WHERE game_id = ts.game_id)
         ELSE (SELECT home_goals FROM games WHERE game_id = ts.game_id)
-    END) AS goal_difference,
-    ROUND(AVG(ts.possession_percentage)::numeric, 2) AS avg_possession
+    END) AS goal_difference
 FROM team_stats ts
 JOIN games g ON ts.game_id = g.game_id
 JOIN teams t ON ts.team_id = t.team_id
@@ -782,22 +735,12 @@ SELECT
     a.player_id,
     p.name AS player_name,
     p.nationality,
-    COUNT(DISTINCT a.game_id) AS games_played,
-    SUM(a.goals) AS total_goals,
-    SUM(a.assists) AS total_assists,
-    SUM(a.time_played) AS total_minutes,
-    ROUND((SUM(a.goals)::numeric / NULLIF(SUM(a.time_played), 0) * 90), 3) AS goals_per_90,
-    ROUND(AVG(a.x_goals)::numeric, 3) AS avg_x_goals
 FROM appearances a
 JOIN games g ON a.game_id = g.game_id
 JOIN players p ON a.player_id = p.player_id
 JOIN leagues l ON g.league_id = l.league_id
 WHERE g.status = 'completed'
 GROUP BY g.season, g.league_id, l.name, a.player_id, p.name, p.nationality
-HAVING SUM(a.goals) > 0;
-
-CREATE INDEX idx_mv_top_scorers_season_league ON mv_top_scorers(season, league_id, total_goals DESC);
-CREATE INDEX idx_mv_top_scorers_player ON mv_top_scorers(player_id, season);
 
 COMMENT ON MATERIALIZED VIEW mv_top_scorers IS 'Top goal scorers by season and league';
 
