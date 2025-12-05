@@ -278,8 +278,7 @@ def get_league_standings(league_id, season):
         goals_for,
         goals_against,
         goal_difference,
-        points,
-        ROUND(avg_possession, 1) as avg_possession
+        points
     FROM mv_league_standings
     WHERE league_id = %s AND season = %s
     ORDER BY points DESC, goal_difference DESC, goals_for DESC
@@ -314,7 +313,6 @@ def get_team_performance_comparison(league_id, season):
         SUM(ts.shots) as total_shots,
         SUM(ts.shots_on_target) as shots_on_target,
         ROUND((SUM(ts.shots_on_target)::numeric / NULLIF(SUM(ts.shots), 0) * 100), 1) as shot_accuracy,
-        ROUND(AVG(ts.possession_percentage)::numeric, 1) as avg_possession,
         SUM(CASE WHEN ts.result = 'win' THEN 1 ELSE 0 END) as wins,
         SUM(CASE WHEN ts.result = 'draw' THEN 1 ELSE 0 END) as draws,
         SUM(CASE WHEN ts.result = 'loss' THEN 1 ELSE 0 END) as losses
@@ -369,8 +367,7 @@ def get_home_away_analysis(league_id, season):
         SUM(CASE WHEN result = 'draw' THEN 1 ELSE 0 END) as draws,
         SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses,
         ROUND(AVG(goals)::numeric, 2) as avg_goals,
-        ROUND(AVG(x_goals)::numeric, 2) as avg_xg,
-        ROUND(AVG(possession_percentage)::numeric, 1) as avg_possession
+        ROUND(AVG(x_goals)::numeric, 2) as avg_xg
     FROM team_stats ts
     JOIN games g ON ts.game_id = g.game_id
     WHERE g.league_id = %s AND g.season = %s
@@ -409,8 +406,7 @@ def get_league_comparison_stats():
         SUM(g.home_goals + g.away_goals) as total_goals,
         ROUND(AVG(g.home_goals + g.away_goals)::numeric, 2) as avg_goals_per_match,
         COUNT(DISTINCT ts.team_id) as teams_count,
-        SUM(ts.shots) as total_shots,
-        ROUND(AVG(ts.possession_percentage)::numeric, 1) as avg_possession
+        SUM(ts.shots) as total_shots
     FROM leagues l
     JOIN games g ON l.league_id = g.league_id
     JOIN team_stats ts ON g.game_id = ts.game_id
@@ -490,7 +486,7 @@ def create_standings_table(df):
     df.insert(0, 'Rank', range(1, len(df) + 1))
     
     # Format column names
-    df.columns = ['Rank', 'Team', 'MP', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts', 'Poss%']
+    df.columns = ['Rank', 'Team', 'MP', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts']
     
     return df
 
@@ -681,9 +677,9 @@ def plot_league_comparison(df):
     for idx, row in df.iterrows():
         fig.add_trace(go.Scatterpolar(
             r=[row['total_matches'], row['total_goals'], row['avg_goals_per_match']*100, 
-               row['total_shots']/100, row['avg_possession']],
+               row['total_shots']/100],
             theta=['Total Matches', 'Total Goals', 'Avg Goals/Match (x100)', 
-                   'Total Shots (/100)', 'Avg Possession'],
+                   'Total Shots (/100)'],
             fill='toself',
             name=row['league']
         ))
@@ -700,24 +696,24 @@ def plot_league_comparison(df):
     return fig
 
 def plot_possession_vs_goals(df):
-    """Create scatter plot for possession vs goals"""
+    """Create scatter plot for goals vs shot accuracy"""
     if df.empty:
         return None
     
     fig = px.scatter(
         df,
-        x='avg_possession',
+        x='shot_accuracy',
         y='goals_scored',
-        size='shot_accuracy',
+        size='total_shots',
         color='wins',
         hover_name='team_name',
         labels={
-            'avg_possession': 'Average Possession (%)',
-            'goals_scored': 'Goals Scored',
             'shot_accuracy': 'Shot Accuracy (%)',
+            'goals_scored': 'Goals Scored',
+            'total_shots': 'Total Shots',
             'wins': 'Wins'
         },
-        title='Possession vs Goals Scored (Size: Shot Accuracy)',
+        title='Goals Scored vs Shot Accuracy (Size: Total Shots)',
         color_continuous_scale='Viridis'
     )
     
@@ -1015,8 +1011,7 @@ def main():
                     'total_matches': '{:,}',
                     'total_goals': '{:,}',
                     'avg_goals_per_match': '{:.2f}',
-                    'total_shots': '{:,}',
-                    'avg_possession': '{:.1f}'
+                    'total_shots': '{:,}'
                 }),
                 width='stretch',
                 hide_index=True
@@ -1157,14 +1152,12 @@ def main():
                     st.markdown("#### 🏠 Home Statistics")
                     st.metric("Win Rate", f"{(home_data['wins']/home_data['matches']*100):.1f}%")
                     st.metric("Avg Goals", f"{home_data['avg_goals']:.2f}")
-                    home_poss = home_data['avg_possession'] if home_data['avg_possession'] is not None else 0
-                    st.metric("Avg Possession", f"{home_poss:.1f}%")
+                    st.metric("Avg xG", f"{home_data['avg_xg']:.2f}")
                     
                     st.markdown("#### ✈️ Away Statistics")
                     st.metric("Win Rate", f"{(away_data['wins']/away_data['matches']*100):.1f}%")
                     st.metric("Avg Goals", f"{away_data['avg_goals']:.2f}")
-                    away_poss = away_data['avg_possession'] if away_data['avg_possession'] is not None else 0
-                    st.metric("Avg Possession", f"{away_poss:.1f}%")
+                    st.metric("Avg xG", f"{away_data['avg_xg']:.2f}")
     
     # ========================================================================
     # PAGE: PLAYER STATISTICS
