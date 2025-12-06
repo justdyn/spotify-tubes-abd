@@ -204,7 +204,7 @@ def get_database_connection():
             host="localhost",
             database="laliga_europe",
             user="postgres",
-            password="1",
+            password="postgres",
             port="5432"
         )
         return conn
@@ -269,34 +269,62 @@ def get_database_overview():
 def get_league_standings(league_id, season):
     """Get league standings for specific season"""
     query = """
-    SELECT 
-        team_name,
-        matches_played,
-        wins,
-        draws,
-        losses,
-        goals_for,
-        goals_against,
-        goal_difference,
-        points
-    FROM mv_league_standings
-    WHERE league_id = %s AND season = %s
+    WITH team_goals AS (
+        SELECT
+            ts.team_id,
+            SUM(ts.goals) as goals_for,
+            SUM(CASE WHEN ts.location = 'home' THEN g.away_goals ELSE g.home_goals END) as goals_against
+        FROM team_stats ts
+        JOIN games g ON ts.game_id = g.game_id
+        WHERE g.league_id = %s AND g.season = %s AND g.status = 'completed'
+        GROUP BY ts.team_id
+    ),
+    team_results AS (
+        SELECT
+            ts.team_id,
+            t.name as team_name,
+            COUNT(ts.game_id) as matches_played,
+            COUNT(CASE WHEN ts.result = 'win' THEN 1 END) as wins,
+            COUNT(CASE WHEN ts.result = 'draw' THEN 1 END) as draws,
+            COUNT(CASE WHEN ts.result = 'loss' THEN 1 END) as losses
+        FROM team_stats ts
+        JOIN games g ON ts.game_id = g.game_id
+        JOIN teams t ON ts.team_id = t.team_id
+        WHERE g.league_id = %s AND g.season = %s AND g.status = 'completed'
+        GROUP BY ts.team_id, t.name
+    )
+    SELECT
+        tr.team_name,
+        tr.matches_played,
+        tr.wins,
+        tr.draws,
+        tr.losses,
+        tg.goals_for,
+        tg.goals_against,
+        (tg.goals_for - tg.goals_against) as goal_difference,
+        (tr.wins * 3 + tr.draws) as points
+    FROM team_results tr
+    JOIN team_goals tg ON tr.team_id = tg.team_id
     ORDER BY points DESC, goal_difference DESC, goals_for DESC
     """
-    return execute_query(query, (league_id, season))
+    return execute_query(query, (league_id, season, league_id, season))
 
 def get_top_scorers(league_id, season, limit=20):
     """Get top scorers for specific league and season"""
     query = """
-    SELECT 
-        player_name,
-        games_played,
-        total_goals,
-        total_assists,
-        ROUND(goals_per_90, 2) as goals_per_90,
-        ROUND(avg_x_goals, 2) as avg_xg
-    FROM mv_top_scorers
-    WHERE league_id = %s AND season = %s
+    SELECT
+        p.name as player_name,
+        COUNT(DISTINCT a.game_id) as games_played,
+        SUM(a.goals) as total_goals,
+        SUM(a.assists) as total_assists,
+        ROUND((SUM(a.goals)::numeric / NULLIF(SUM(a.time_played), 0) * 90), 2) as goals_per_90,
+        ROUND(AVG(a.x_goals)::numeric, 2) as avg_xg
+    FROM appearances a
+    JOIN games g ON a.game_id = g.game_id
+    JOIN players p ON a.player_id = p.player_id
+    WHERE g.league_id = %s AND g.season = %s AND g.status = 'completed'
+    GROUP BY p.player_id, p.name
+    HAVING SUM(a.goals) > 0
     ORDER BY total_goals DESC, goals_per_90 DESC
     LIMIT %s
     """
@@ -834,7 +862,7 @@ def plot_player_nationalities_map(df):
     """Create map showing player nationalities distribution"""
     if df.empty:
         return None
-    
+
     # Map common nationalities to coordinates (approximate)
     nationality_coords = {
         'England': {'lat': 52.3555, 'lon': -1.1743},
@@ -868,17 +896,17 @@ def plot_player_nationalities_map(df):
         'Austria': {'lat': 47.5162, 'lon': 14.5501},
         'Switzerland': {'lat': 46.8182, 'lon': 8.2275},
     }
-    
+
     # Add coordinates
     df['lat'] = df['nationality'].map(lambda x: nationality_coords.get(x, {}).get('lat', None))
     df['lon'] = df['nationality'].map(lambda x: nationality_coords.get(x, {}).get('lon', None))
-    
+
     # Filter out unknown coordinates
     df_mapped = df[df['lat'].notna()].copy()
-    
+
     if df_mapped.empty:
         return None
-    
+
     fig = px.scatter_geo(
         df_mapped,
         lat='lat',
@@ -898,7 +926,7 @@ def plot_player_nationalities_map(df):
         color_continuous_scale='Plasma',
         size_max=40
     )
-    
+
     fig.update_geos(
         projection_type='natural earth',
         showland=True,
@@ -910,14 +938,107 @@ def plot_player_nationalities_map(df):
         countrycolor='rgb(204, 204, 204)',
         bgcolor='rgba(0,0,0,0)'
     )
-    
+
     fig.update_layout(
         template='plotly_white',
         height=600,
         margin=dict(l=0, r=0, t=40, b=0)
     )
-    
+
     return fig
+
+def create_database_erd():
+    """Create interactive ERD (Entity Relationship Diagram) using Plotly network graph"""
+    try:
+        # Define nodes (tables) and their positions
+        nodes = [
+            {'label': '🏆\nleagues\n(Master)', 'x': 0, 'y': 2, 'color': '#1f77b4'},
+            {'label': '⚽\nteams\n(Master)', 'x': -1, 'y': 1, 'color': '#1f77b4'},
+            {'label': '👤\nplayers\n(Master)', 'x': 1, 'y': 1, 'color': '#1f77b4'},
+            {'label': '🎮\ngames\n(Fact)', 'x': 0, 'y': 0, 'color': '#ff7f0e'},
+            {'label': '📈\nteam_stats\n(Stats)', 'x': -1, 'y': -1, 'color': '#2ca02c'},
+            {'label': '🏃\nappearances\n(Stats)', 'x': 1, 'y': -1, 'color': '#2ca02c'},
+            {'label': '🎯\nshots\n(Stats)', 'x': 0, 'y': -2, 'color': '#2ca02c'},
+        ]
+
+        # Define edges (relationships)
+        edges = [
+            # leagues -> games
+            {'source': 0, 'target': 3, 'description': '1:N'},
+            # teams -> games
+            {'source': 1, 'target': 3, 'description': '1:N (home/away)'},
+            # players -> appearances
+            {'source': 2, 'target': 5, 'description': '1:N'},
+            {'source': 2, 'target': 6, 'description': '1:N'},
+            # games -> team_stats
+            {'source': 3, 'target': 4, 'description': '1:N'},
+            # games -> appearances
+            {'source': 3, 'target': 5, 'description': '1:N'},
+            # games -> shots
+            {'source': 3, 'target': 6, 'description': '1:N'},
+        ]
+
+        # Create node traces
+        node_trace = go.Scatter(
+            x=[node['x'] for node in nodes],
+            y=[node['y'] for node in nodes],
+            mode='markers+text',
+            text=[node['label'] for node in nodes],
+            textposition='middle center',
+            marker=dict(
+                size=80,
+                color=[node['color'] for node in nodes],
+                line=dict(width=2, color='white'),
+                symbol='square'
+            ),
+            textfont=dict(size=10, color='white', family='Arial, bold'),
+            hovertemplate='<b>%{text}</b><extra></extra>'
+        )
+
+        # Create edge traces
+        edge_traces = []
+        for edge in edges:
+            x0, y0 = nodes[edge['source']]['x'], nodes[edge['source']]['y']
+            x1, y1 = nodes[edge['target']]['x'], nodes[edge['target']]['y']
+
+            edge_trace = go.Scatter(
+                x=[x0, x1, None],
+                y=[y0, y1, None],
+                mode='lines+text',
+                line=dict(width=2, color='#666'),
+                text=[edge['description']],
+                textposition='middle center',
+                textfont=dict(size=8, color='#666'),
+                hoverinfo='skip'
+            )
+            edge_traces.append(edge_trace)
+
+        # Create the figure
+        fig = go.Figure()
+
+        # Add edge traces
+        for edge_trace in edge_traces:
+            fig.add_trace(edge_trace)
+
+        # Add node trace
+        fig.add_trace(node_trace)
+
+        # Update layout
+        fig.update_layout(
+            title='Database Entity Relationship Diagram (ERD)',
+            showlegend=False,
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-2, 2]),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-3, 3]),
+            template='plotly_white',
+            height=500,
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating ERD: {e}")
+        return None
 
 # ============================================================================
 # MAIN APPLICATION
@@ -1033,7 +1154,7 @@ def main():
                 )
                 fig.update_traces(textposition='outside')
                 fig.update_layout(template='plotly_white', height=400)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             with col2:
                 # Bar chart for avg goals per match
@@ -1048,7 +1169,7 @@ def main():
                 )
                 fig.update_traces(textposition='outside', texttemplate='%{text:.2f}')
                 fig.update_layout(template='plotly_white', height=400)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
     
     # ========================================================================
     # PAGE: LEAGUE ANALYSIS
@@ -1385,11 +1506,206 @@ def main():
     # ========================================================================
     # PAGE: DATABASE EXPLORER
     # ========================================================================
-    
+
     elif page == "Database Explorer":
         st.header("🔍 Database Explorer")
-        st.markdown("Execute custom SQL queries to explore the database.")
-        
+        st.markdown("Explore and query the European football database with comprehensive visualizations and documentation.")
+
+        # Database Overview Section
+        st.subheader("📊 Database Overview")
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            st.markdown("""
+            #### 🏗️ **Database Architecture**
+            The **laliga_europe** database is a comprehensive PostgreSQL database designed for European football analytics.
+            It contains data from the top 5 European leagues: Premier League, La Liga, Bundesliga, Serie A, and Ligue 1.
+
+            **Key Features:**
+            - 7 normalized tables with proper indexing
+            - Advanced analytics metrics (xG, xA, shot positions)
+            - Materialized views for performance optimization
+            - Comprehensive constraints and referential integrity
+            """)
+
+        with col2:
+            # Database statistics
+            try:
+                db_stats = get_database_overview()
+                if not db_stats.empty:
+                    stats = db_stats.iloc[0]
+                    st.metric("🏆 Leagues", f"{stats['total_leagues']}")
+                    st.metric("⚽ Teams", f"{stats['total_teams']:,}")
+                    st.metric("👥 Players", f"{stats['total_players']:,}")
+                    st.metric("🎮 Matches", f"{stats['total_games']:,}")
+            except:
+                st.info("Database statistics not available")
+
+        st.markdown("---")
+
+        # ERD Visualization
+        st.subheader("🔗 Database Schema Visualization")
+
+        # Create ERD using Plotly network graph
+        fig = create_database_erd()
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("""
+        **Diagram Legend:**
+        - 🔵 **Master Tables** (leagues, teams, players) - Core reference data
+        - 🟡 **Transaction Tables** (games, team_stats, appearances, shots) - Detailed match data
+        - 🔗 **Relationships** showing foreign key connections
+
+        **Click and drag** to explore the schema interactively!
+        """)
+
+        st.markdown("---")
+
+        # Tables Documentation
+        st.subheader("📚 Tables Documentation")
+
+        # Leagues Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/trophy.png", width=80)
+            with col2:
+                st.markdown("#### 🏆 **leagues**")
+                st.markdown("""
+                **Purpose:** Master table containing the top 5 European football leagues.
+
+                **Key Columns:**
+                - `league_id` (PK): Unique identifier for each league
+                - `name`: League full name (Premier League, La Liga, etc.)
+                - `country`: League country of origin
+
+                **Relationships:** Referenced by `games` table
+                """)
+
+        # Teams Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/football-team.png", width=80)
+            with col2:
+                st.markdown("#### ⚽ **teams**")
+                st.markdown("""
+                **Purpose:** Comprehensive team information across all leagues.
+
+                **Key Columns:**
+                - `team_id` (PK): Unique team identifier
+                - `name`: Official team name
+                - `league_id` (FK): Associated league
+                - `is_active`: Team status flag
+
+                **Relationships:** Connected to `games` and `team_stats`
+                """)
+
+        # Players Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/user.png", width=80)
+            with col2:
+                st.markdown("#### 👤 **players**")
+                st.markdown("""
+                **Purpose:** Player master data including basic information and nationalities.
+
+                **Key Columns:**
+                - `player_id` (PK): Unique player identifier
+                - `name`: Player full name
+                - `nationality`: Player nationality
+                - `position`: Playing position
+
+                **Relationships:** Referenced by `appearances` and `shots`
+                """)
+
+        # Games Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/football2--v1.png", width=80)
+            with col2:
+                st.markdown("#### 🎮 **games** (Central Fact Table)")
+                st.markdown("""
+                **Purpose:** Complete match information - the heart of the database.
+
+                **Key Columns:**
+                - `game_id` (PK): Unique match identifier
+                - `league_id` (FK): Associated league
+                - `season`: Match season year
+                - `date`: Match date and time
+                - `home_team_id/away_team_id` (FK): Participating teams
+                - `home_goals/away_goals`: Final score
+                - `*_probability`: Pre-match win probabilities
+
+                **Relationships:** Central hub connecting to all other tables
+                """)
+
+        # Team Stats Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/statistics.png", width=80)
+            with col2:
+                st.markdown("#### 📈 **team_stats**")
+                st.markdown("""
+                **Purpose:** Detailed team performance metrics for each match.
+
+                **Key Columns:**
+                - `game_id, team_id` (Composite PK): Match-team combination
+                - `location`: Home ('h') or Away ('a')
+                - `goals/x_goals`: Actual vs expected goals
+                - `shots/shots_on_target`: Shooting statistics
+                - `result`: Match result (W/D/L)
+                - Advanced metrics: `ppda`, `deep_passes`, `fouls`, cards
+
+                **Relationships:** Depends on `games` and `teams` tables
+                """)
+
+        # Appearances Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/running.png", width=80)
+            with col2:
+                st.markdown("#### 🏃 **appearances**")
+                st.markdown("""
+                **Purpose:** Individual player performance data for each match appearance.
+
+                **Key Columns:**
+                - `game_id, player_id` (Composite PK): Match-player appearance
+                - `goals/assists`: Scoring contributions
+                - `shots/x_goals`: Shooting metrics
+                - `time_played`: Minutes on field
+                - Advanced: `x_assists`, `key_passes`, `position`
+
+                **Relationships:** Links `games` and `players` with detailed statistics
+                """)
+
+        # Shots Table
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image("https://img.icons8.com/color/96/000000/target.png", width=80)
+            with col2:
+                st.markdown("#### 🎯 **shots**")
+                st.markdown("""
+                **Purpose:** Granular shot-by-shot data for advanced analytics.
+
+                **Key Columns:**
+                - `shot_id` (PK): Unique shot identifier
+                - `game_id` (FK): Associated match
+                - `shooter_id/assister_id` (FK): Players involved
+                - Shot data: `situation`, `shot_type`, `shot_result`
+                - Precision data: `x_goal`, `position_x/y`, `minute`
+
+                **Relationships:** Detailed extension of match and player data
+                """)
+
+        st.markdown("---")
+
         # Sample queries
         st.subheader("📝 Sample Queries")
         
