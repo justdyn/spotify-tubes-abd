@@ -1296,7 +1296,7 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.image("https://img.icons8.com/color/96/000000/football2--v1.png", width=80)
+        st.image("DAF.png", width=150)
         st.title("Navigation")
         
         page = st.radio(
@@ -1774,31 +1774,6 @@ def main():
 
         st.markdown("---")
 
-        # Tables Documentation
-        st.subheader("📋 Database Tables Reference")
-
-        # Core Master Tables
-        st.markdown("### 🗂️ **Master Tables**")
-
-        # Leagues Table
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.markdown("🏆 **leagues**")
-        with col2:
-            st.markdown("*Master reference table containing top 5 European football leagues*")
-
-        leagues_data = {
-            "Attribute": ["league_id", "name", "country", "is_active", "created_at", "updated_at"],
-            "Type": ["SERIAL", "VARCHAR(100)", "VARCHAR(50)", "BOOLEAN", "TIMESTAMP", "TIMESTAMP"],
-            "Constraints": ["PRIMARY KEY", "NOT NULL, UNIQUE", "NOT NULL", "NOT NULL, DEFAULT true", "NOT NULL, DEFAULT CURRENT_TIMESTAMP", "NOT NULL, DEFAULT CURRENT_TIMESTAMP"],
-            "Description": ["Auto-generated primary key", "Full league name", "Country location", "Soft delete flag", "Creation timestamp", "Last modification timestamp"]
-        }
-        st.dataframe(pd.DataFrame(leagues_data), use_container_width=True, hide_index=True)
-
-        st.markdown("**Relationships:** Referenced by `games.league_id` (1:N)")
-        st.markdown("**Data Volume:** ~5 rows (heavily cached)")
-        st.markdown("---")
-
         # Teams Table
         col1, col2 = st.columns([1, 4])
         with col1:
@@ -2019,31 +1994,6 @@ def main():
                 st.error("⚠️ Only SELECT queries are allowed for safety reasons.")
         
         st.markdown("---")
-        
-        # Database Schema
-        st.subheader("📚 Database Schema")
-        
-        with st.expander("View Tables and Columns"):
-            schema_query = """
-                SELECT 
-                    table_name,
-                    column_name,
-                    data_type,
-                    is_nullable
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                ORDER BY table_name, ordinal_position;
-            """
-            schema = execute_query(schema_query)
-            
-            if not schema.empty:
-                tables = schema['table_name'].unique()
-                
-                for table in tables:
-                    st.markdown(f"**📋 {table}**")
-                    table_cols = schema[schema['table_name'] == table][['column_name', 'data_type', 'is_nullable']]
-                    st.dataframe(table_cols, use_container_width=True, hide_index=True)
-                    st.markdown("---")
     
     # Footer
     st.markdown("---")
