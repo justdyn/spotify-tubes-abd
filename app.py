@@ -947,98 +947,340 @@ def plot_player_nationalities_map(df):
 
     return fig
 
-def create_database_erd():
-    """Create interactive ERD (Entity Relationship Diagram) using Plotly network graph"""
-    try:
-        # Define nodes (tables) and their positions
-        nodes = [
-            {'label': '🏆\nleagues\n(Master)', 'x': 0, 'y': 2, 'color': '#1f77b4'},
-            {'label': '⚽\nteams\n(Master)', 'x': -1, 'y': 1, 'color': '#1f77b4'},
-            {'label': '👤\nplayers\n(Master)', 'x': 1, 'y': 1, 'color': '#1f77b4'},
-            {'label': '🎮\ngames\n(Fact)', 'x': 0, 'y': 0, 'color': '#ff7f0e'},
-            {'label': '📈\nteam_stats\n(Stats)', 'x': -1, 'y': -1, 'color': '#2ca02c'},
-            {'label': '🏃\nappearances\n(Stats)', 'x': 1, 'y': -1, 'color': '#2ca02c'},
-            {'label': '🎯\nshots\n(Stats)', 'x': 0, 'y': -2, 'color': '#2ca02c'},
-        ]
+def create_interactive_erd_html():
+    """Create interactive HTML-based ERD that can be zoomed and panned"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            .erd-container {
+                width: 100%;
+                height: 600px;
+                border: 2px solid #e1e5e9;
+                border-radius: 8px;
+                overflow: hidden;
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                position: relative;
+            }
 
-        # Define edges (relationships)
-        edges = [
-            # leagues -> games
-            {'source': 0, 'target': 3, 'description': '1:N'},
-            # teams -> games
-            {'source': 1, 'target': 3, 'description': '1:N (home/away)'},
-            # players -> appearances
-            {'source': 2, 'target': 5, 'description': '1:N'},
-            {'source': 2, 'target': 6, 'description': '1:N'},
-            # games -> team_stats
-            {'source': 3, 'target': 4, 'description': '1:N'},
-            # games -> appearances
-            {'source': 3, 'target': 5, 'description': '1:N'},
-            # games -> shots
-            {'source': 3, 'target': 6, 'description': '1:N'},
-        ]
+            .erd-canvas {
+                width: 100%;
+                height: 100%;
+                transform-origin: center;
+                transition: transform 0.1s ease-out;
+                cursor: grab;
+                user-select: none;
+            }
 
-        # Create node traces
-        node_trace = go.Scatter(
-            x=[node['x'] for node in nodes],
-            y=[node['y'] for node in nodes],
-            mode='markers+text',
-            text=[node['label'] for node in nodes],
-            textposition='middle center',
-            marker=dict(
-                size=80,
-                color=[node['color'] for node in nodes],
-                line=dict(width=2, color='white'),
-                symbol='square'
-            ),
-            textfont=dict(size=10, color='white', family='Arial, bold'),
-            hovertemplate='<b>%{text}</b><extra></extra>'
-        )
+            .erd-canvas:active {
+                cursor: grabbing;
+            }
 
-        # Create edge traces
-        edge_traces = []
-        for edge in edges:
-            x0, y0 = nodes[edge['source']]['x'], nodes[edge['source']]['y']
-            x1, y1 = nodes[edge['target']]['x'], nodes[edge['target']]['y']
+            .table-node {
+                position: absolute;
+                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+                border-radius: 12px;
+                border: 3px solid;
+                box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+                min-width: 140px;
+                text-align: center;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                transform: translate(-50%, -50%);
+                transition: all 0.3s ease;
+            }
 
-            edge_trace = go.Scatter(
-                x=[x0, x1, None],
-                y=[y0, y1, None],
-                mode='lines+text',
-                line=dict(width=2, color='#666'),
-                text=[edge['description']],
-                textposition='middle center',
-                textfont=dict(size=8, color='#666'),
-                hoverinfo='skip'
-            )
-            edge_traces.append(edge_trace)
+            .table-node:hover {
+                transform: translate(-50%, -50%) scale(1.05);
+                box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+                z-index: 100;
+            }
 
-        # Create the figure
-        fig = go.Figure()
+            .table-master { border-color: #1f77b4; background: linear-gradient(135deg, #e8f4fd 0%, #b3d9ff 100%); }
+            .table-fact { border-color: #ff7f0e; background: linear-gradient(135deg, #fff2e6 0%, #ffcc99 100%); }
+            .table-stats { border-color: #2ca02c; background: linear-gradient(135deg, #e8f5e8 0%, #b3ffb3 100%); }
 
-        # Add edge traces
-        for edge_trace in edge_traces:
-            fig.add_trace(edge_trace)
+            .table-icon {
+                font-size: 24px;
+                margin-bottom: 5px;
+            }
 
-        # Add node trace
-        fig.add_trace(node_trace)
+            .table-name {
+                font-weight: bold;
+                font-size: 14px;
+                color: #2c3e50;
+                margin-bottom: 3px;
+            }
 
-        # Update layout
-        fig.update_layout(
-            title='Database Entity Relationship Diagram (ERD)',
-            showlegend=False,
-            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-2, 2]),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-3, 3]),
-            template='plotly_white',
-            height=500,
-            margin=dict(l=20, r=20, t=60, b=20)
-        )
+            .table-type {
+                font-size: 10px;
+                font-weight: 600;
+                color: #7f8c8d;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
 
-        return fig
+            .relationship-line {
+                position: absolute;
+                height: 3px;
+                background: linear-gradient(90deg, #34495e 0%, #7f8c8d 50%, #34495e 100%);
+                transform-origin: center;
+                border-radius: 2px;
+                z-index: 10;
+            }
 
-    except Exception as e:
-        st.error(f"Error creating ERD: {e}")
-        return None
+            .relationship-label {
+                position: absolute;
+                background: rgba(255, 255, 255, 0.95);
+                border: 2px solid #34495e;
+                border-radius: 15px;
+                padding: 4px 8px;
+                font-size: 11px;
+                font-weight: bold;
+                color: #34495e;
+                transform: translate(-50%, -50%);
+                white-space: nowrap;
+                z-index: 20;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                pointer-events: none;
+            }
+
+            .zoom-controls {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+                z-index: 30;
+            }
+
+            .zoom-btn {
+                width: 35px;
+                height: 35px;
+                background: rgba(255, 255, 255, 0.9);
+                border: 2px solid #34495e;
+                border-radius: 50%;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+                font-weight: bold;
+                color: #34495e;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            }
+
+            .zoom-btn:hover {
+                background: #34495e;
+                color: white;
+                transform: scale(1.1);
+            }
+
+            .reset-btn {
+                margin-top: 10px;
+                width: 60px;
+                height: 35px;
+                background: #e74c3c;
+                border: none;
+                border-radius: 17px;
+                color: white;
+                font-size: 12px;
+                font-weight: bold;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            }
+
+            .reset-btn:hover {
+                background: #c0392b;
+                transform: scale(1.05);
+            }
+
+            .legend {
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+                background: rgba(255, 255, 255, 0.95);
+                border: 2px solid #34495e;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 12px;
+                z-index: 30;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            }
+
+            .legend-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+
+            .legend-color {
+                width: 16px;
+                height: 16px;
+                border-radius: 3px;
+                margin-right: 8px;
+                border: 1px solid #666;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="erd-container">
+            <div class="zoom-controls">
+                <div class="zoom-btn" onclick="zoomIn()">+</div>
+                <div class="zoom-btn" onclick="zoomOut()">−</div>
+                <div class="reset-btn" onclick="resetView()">Reset</div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #e8f4fd 0%, #b3d9ff 100%); border-color: #1f77b4;"></div>
+                    <span><strong>Master Tables</strong></span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #fff2e6 0%, #ffcc99 100%); border-color: #ff7f0e;"></div>
+                    <span><strong>Transaction Tables</strong></span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #e8f5e8 0%, #b3ffb3 100%); border-color: #2ca02c;"></div>
+                    <span><strong>Statistics Tables</strong></span>
+                </div>
+            </div>
+
+            <div class="erd-canvas" id="erdCanvas">
+                <!-- Relationship Lines -->
+                <div class="relationship-line" style="left: 350px; top: 250px; width: 100px; transform: rotate(-30deg);"></div>
+                <div class="relationship-line" style="left: 280px; top: 200px; width: 100px; transform: rotate(30deg);"></div>
+                <div class="relationship-line" style="left: 420px; top: 200px; width: 100px; transform: rotate(-30deg);"></div>
+                <div class="relationship-line" style="left: 500px; top: 200px; width: 50px; transform: rotate(90deg);"></div>
+                <div class="relationship-line" style="left: 287px; top: 387px; width: 100px; transform: rotate(-30deg);"></div>
+                <div class="relationship-line" style="left: 425px; top: 387px; width: 100px; transform: rotate(30deg);"></div>
+                <div class="relationship-line" style="left: 350px; top: 450px; width: 100px; transform: rotate(0deg);"></div>
+
+                <!-- Relationship Labels -->
+                <div class="relationship-label" style="left: 380px; top: 240px;">1:N</div>
+                <div class="relationship-label" style="left: 310px; top: 190px;">1:N (home/away)</div>
+                <div class="relationship-label" style="left: 450px; top: 190px;">1:N</div>
+                <div class="relationship-label" style="left: 505px; top: 175px;">1:N</div>
+                <div class="relationship-label" style="left: 320px; top: 380px;">1:N</div>
+                <div class="relationship-label" style="left: 457px; top: 380px;">1:N</div>
+                <div class="relationship-label" style="left: 380px; top: 440px;">1:N</div>
+
+                <!-- Table Nodes -->
+                <div class="table-node table-master" style="left: 350px; top: 150px;">
+                    <div class="table-icon">🏆</div>
+                    <div class="table-name">leagues</div>
+                    <div class="table-type">Master</div>
+                </div>
+
+                <div class="table-node table-master" style="left: 250px; top: 300px;">
+                    <div class="table-icon">⚽</div>
+                    <div class="table-name">teams</div>
+                    <div class="table-type">Master</div>
+                </div>
+
+                <div class="table-node table-master" style="left: 450px; top: 300px;">
+                    <div class="table-icon">👤</div>
+                    <div class="table-name">players</div>
+                    <div class="table-type">Master</div>
+                </div>
+
+                <div class="table-node table-fact" style="left: 350px; top: 350px;">
+                    <div class="table-icon">🎮</div>
+                    <div class="table-name">games</div>
+                    <div class="table-type">Fact</div>
+                </div>
+
+                <div class="table-node table-stats" style="left: 250px; top: 500px;">
+                    <div class="table-icon">📈</div>
+                    <div class="table-name">team_stats</div>
+                    <div class="table-type">Stats</div>
+                </div>
+
+                <div class="table-node table-stats" style="left: 450px; top: 500px;">
+                    <div class="table-icon">🏃</div>
+                    <div class="table-name">appearances</div>
+                    <div class="table-type">Stats</div>
+                </div>
+
+                <div class="table-node table-stats" style="left: 350px; top: 600px;">
+                    <div class="table-icon">🎯</div>
+                    <div class="table-name">shots</div>
+                    <div class="table-type">Stats</div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let canvas = document.getElementById('erdCanvas');
+            let isDragging = false;
+            let startX, startY, initialX, initialY;
+            let scale = 1;
+            let translateX = 0;
+            let translateY = 0;
+
+            function updateTransform() {
+                canvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+            }
+
+            function zoomIn() {
+                scale = Math.min(scale + 0.2, 3);
+                updateTransform();
+            }
+
+            function zoomOut() {
+                scale = Math.max(scale - 0.2, 0.5);
+                updateTransform();
+            }
+
+            function resetView() {
+                scale = 1;
+                translateX = 0;
+                translateY = 0;
+                updateTransform();
+            }
+
+            // Mouse wheel zoom
+            canvas.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    zoomIn();
+                } else {
+                    zoomOut();
+                }
+            });
+
+            // Mouse drag pan
+            canvas.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+                canvas.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (isDragging) {
+                    translateX = e.clientX - startX;
+                    translateY = e.clientY - startY;
+                    updateTransform();
+                }
+            });
+
+            document.addEventListener('mouseup', function() {
+                isDragging = false;
+                canvas.style.cursor = 'grab';
+            });
+
+            // Initialize
+            updateTransform();
+        </script>
+    </body>
+    </html>
+    """
+
+    return html_content
 
 # ============================================================================
 # MAIN APPLICATION
@@ -1200,12 +1442,12 @@ def main():
         if not standings.empty:
             standings_table = create_standings_table(standings)
             
-            # Highlight top 4 and bottom 3
+            # Highlight top 4 and bottom 3 with high contrast colors
             def highlight_rows(row):
                 if row['Rank'] <= 4:
-                    return ['background-color: #d4edda'] * len(row)
+                    return ['background-color: #28a745; color: white; font-weight: bold'] * len(row)
                 elif row['Rank'] >= len(standings_table) - 2:
-                    return ['background-color: #f8d7da'] * len(row)
+                    return ['background-color: #dc3545; color: white; font-weight: bold'] * len(row)
                 else:
                     return [''] * len(row)
             
@@ -1511,198 +1753,181 @@ def main():
         st.header("🔍 Database Explorer")
         st.markdown("Explore and query the European football database with comprehensive visualizations and documentation.")
 
-        # Database Overview Section
-        st.subheader("📊 Database Overview")
-        col1, col2 = st.columns([2, 1])
 
-        with col1:
+
+        # ERD Diagram
+        st.subheader("🔗 Database ERD Schema")
+
+        try:
+            st.image("erd-schema.png", caption="Database ERD Diagram", use_container_width=True)
+
             st.markdown("""
-            #### 🏗️ **Database Architecture**
-            The **laliga_europe** database is a comprehensive PostgreSQL database designed for European football analytics.
-            It contains data from the top 5 European leagues: Premier League, La Liga, Bundesliga, Serie A, and Ligue 1.
-
-            **Key Features:**
-            - 7 normalized tables with proper indexing
-            - Advanced analytics metrics (xG, xA, shot positions)
-            - Materialized views for performance optimization
-            - Comprehensive constraints and referential integrity
+            **📖 Database Structure Guide:**
+            - 🔵 **Master Tables** (leagues, teams, players) → Core reference data
+            - 🟢 **Bridge Tables** (team_players) → Transfer history tracking
+            - 🟡 **Transaction Tables** (games, team_stats, appearances, shots) → Match analytics data
+            - 🔗 **Lines/arrows** → Foreign key relationships between tables
             """)
-
-        with col2:
-            # Database statistics
-            try:
-                db_stats = get_database_overview()
-                if not db_stats.empty:
-                    stats = db_stats.iloc[0]
-                    st.metric("🏆 Leagues", f"{stats['total_leagues']}")
-                    st.metric("⚽ Teams", f"{stats['total_teams']:,}")
-                    st.metric("👥 Players", f"{stats['total_players']:,}")
-                    st.metric("🎮 Matches", f"{stats['total_games']:,}")
-            except:
-                st.info("Database statistics not available")
-
-        st.markdown("---")
-
-        # ERD Visualization
-        st.subheader("🔗 Database Schema Visualization")
-
-        # Create ERD using Plotly network graph
-        fig = create_database_erd()
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("""
-        **Diagram Legend:**
-        - 🔵 **Master Tables** (leagues, teams, players) - Core reference data
-        - 🟡 **Transaction Tables** (games, team_stats, appearances, shots) - Detailed match data
-        - 🔗 **Relationships** showing foreign key connections
-
-        **Click and drag** to explore the schema interactively!
-        """)
+        except:
+            st.warning("⚠️ ERD diagram image (erd.png) not found in current directory.")
+            st.info("� Please ensure 'erd.png' file is placed in the same directory as the application.")
 
         st.markdown("---")
 
         # Tables Documentation
-        st.subheader("📚 Tables Documentation")
+        st.subheader("📋 Database Tables Reference")
+
+        # Core Master Tables
+        st.markdown("### 🗂️ **Master Tables**")
 
         # Leagues Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.image("https://img.icons8.com/color/96/000000/trophy.png", width=80)
-            with col2:
-                st.markdown("#### 🏆 **leagues**")
-                st.markdown("""
-                **Purpose:** Master table containing the top 5 European football leagues.
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("🏆 **leagues**")
+        with col2:
+            st.markdown("*Master reference table containing top 5 European football leagues*")
 
-                **Key Columns:**
-                - `league_id` (PK): Unique identifier for each league
-                - `name`: League full name (Premier League, La Liga, etc.)
-                - `country`: League country of origin
+        leagues_data = {
+            "Attribute": ["league_id", "name", "country", "is_active", "created_at", "updated_at"],
+            "Type": ["SERIAL", "VARCHAR(100)", "VARCHAR(50)", "BOOLEAN", "TIMESTAMP", "TIMESTAMP"],
+            "Constraints": ["PRIMARY KEY", "NOT NULL, UNIQUE", "NOT NULL", "NOT NULL, DEFAULT true", "NOT NULL, DEFAULT CURRENT_TIMESTAMP", "NOT NULL, DEFAULT CURRENT_TIMESTAMP"],
+            "Description": ["Auto-generated primary key", "Full league name", "Country location", "Soft delete flag", "Creation timestamp", "Last modification timestamp"]
+        }
+        st.dataframe(pd.DataFrame(leagues_data), use_container_width=True, hide_index=True)
 
-                **Relationships:** Referenced by `games` table
-                """)
+        st.markdown("**Relationships:** Referenced by `games.league_id` (1:N)")
+        st.markdown("**Data Volume:** ~5 rows (heavily cached)")
+        st.markdown("---")
 
         # Teams Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.image("https://img.icons8.com/color/96/000000/football-team.png", width=80)
-            with col2:
-                st.markdown("#### ⚽ **teams**")
-                st.markdown("""
-                **Purpose:** Comprehensive team information across all leagues.
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("⚽ **teams**")
+        with col2:
+            st.markdown("*Comprehensive team registry across all 5 leagues*")
 
-                **Key Columns:**
-                - `team_id` (PK): Unique team identifier
-                - `name`: Official team name
-                - `league_id` (FK): Associated league
-                - `is_active`: Team status flag
+        teams_data = {
+            "Attribute": ["team_id", "league_id", "name", "is_active", "created_at", "updated_at"],
+            "Type": ["SERIAL", "INTEGER", "VARCHAR(100)", "BOOLEAN", "TIMESTAMP", "TIMESTAMP"],
+            "Constraints": ["PRIMARY KEY", "NOT NULL, FOREIGN KEY → leagues", "NOT NULL", "NOT NULL, DEFAULT true", "NOT NULL, DEFAULT CURRENT_TIMESTAMP", "NOT NULL, DEFAULT CURRENT_TIMESTAMP"],
+            "Description": ["Auto-generated primary key", "League affiliation", "Official team name", "Active competition flag", "Creation timestamp", "Last modification timestamp"]
+        }
+        st.dataframe(pd.DataFrame(teams_data), use_container_width=True, hide_index=True)
 
-                **Relationships:** Connected to `games` and `team_stats`
-                """)
+        st.markdown("**Relationships:** References `leagues.league_id`, Referenced by `games.home_team_id/away_team_id`, `team_stats.team_id`")
+        st.markdown("**Data Volume:** ~150+ active teams")
+        st.markdown("---")
 
         # Players Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.image("https://img.icons8.com/color/96/000000/user.png", width=80)
-            with col2:
-                st.markdown("#### 👤 **players**")
-                st.markdown("""
-                **Purpose:** Player master data including basic information and nationalities.
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("👤 **players**")
+        with col2:
+            st.markdown("*Player master data with demographics and positions*")
 
-                **Key Columns:**
-                - `player_id` (PK): Unique player identifier
-                - `name`: Player full name
-                - `nationality`: Player nationality
-                - `position`: Playing position
+        players_data = {
+            "Attribute": ["player_id", "name", "is_active", "created_at", "updated_at"],
+            "Type": ["SERIAL", "VARCHAR(150)", "BOOLEAN", "TIMESTAMP", "TIMESTAMP"],
+            "Constraints": ["PRIMARY KEY", "NOT NULL", "NOT NULL, DEFAULT true", "NOT NULL, DEFAULT CURRENT_TIMESTAMP", "NOT NULL, DEFAULT CURRENT_TIMESTAMP"],
+            "Description": ["Auto-generated primary key", "Full player name", "Active status flag", "Creation timestamp", "Last modification timestamp"]
+        }
+        st.dataframe(pd.DataFrame(players_data), use_container_width=True, hide_index=True)
 
-                **Relationships:** Referenced by `appearances` and `shots`
-                """)
+        st.markdown("**Relationships:** Referenced by `appearances.player_id`, `shots.shooter_id/assister_id`")
+        st.markdown("**Data Volume:** ~5000+ active players")
+        st.markdown("---")
+
+        # Bridge Tables
+        st.markdown("### 🔗 **Bridge Tables**")
+
+        # Team Players Table
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("🤝 **team_players**")
+        with col2:
+            st.markdown("*Bridge table tracking player-team relationships and transfer history*")
+
+        team_players_data = {
+            "Attribute": ["team_player_id", "team_id", "player_id", "season_start", "season_end", "is_current", "created_at", "updated_at"],
+            "Type": ["SERIAL", "INTEGER", "INTEGER", "SMALLINT", "SMALLINT", "BOOLEAN", "TIMESTAMP", "TIMESTAMP"],
+            "Constraints": ["PRIMARY KEY", "FOREIGN KEY → teams", "FOREIGN KEY → players", "NOT NULL, ≥ 2014", "NULL, ≥ season_start", "NOT NULL, DEFAULT true", "DEFAULT CURRENT_TIMESTAMP", "DEFAULT CURRENT_TIMESTAMP"],
+            "Description": ["Auto-generated primary key", "Team reference", "Player reference", "Season player joined", "Season player left (NULL if current)", "Current team flag", "Creation timestamp", "Last modification timestamp"]
+        }
+        st.dataframe(pd.DataFrame(team_players_data), use_container_width=True, hide_index=True)
+
+        st.markdown("**Relationships:** References `teams.team_id` and `players.player_id`, enables player transfer analytics")
+        st.markdown("**Purpose:** Track player history across multiple teams and seasons")
+        st.markdown("---")
+
+        # Transaction Tables
+        st.markdown("### 🎯 **Transaction Tables**")
 
         # Games Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("🎮 **games**")
+        with col2:
+            st.markdown("*Central fact table containing complete match information (~10,000+ matches)*")
+
+        games_data = {
+            "Attribute": ["game_id", "league_id", "season", "game_week", "date", "home_team_id", "away_team_id", "home_goals", "away_goals", "home_probability", "draw_probability", "away_probability", "home_goals_half_time", "away_goals_half_time", "status", "created_at", "updated_at"],
+            "Type": ["SERIAL", "INTEGER", "SMALLINT", "SMALLINT", "TIMESTAMP", "INTEGER", "INTEGER", "SMALLINT", "SMALLINT", "DECIMAL(5,4)", "DECIMAL(5,4)", "DECIMAL(5,4)", "SMALLINT", "SMALLINT", "VARCHAR(20)", "TIMESTAMP", "TIMESTAMP"],
+            "Constraints": ["PRIMARY KEY", "NOT NULL, FOREIGN KEY → leagues", "NOT NULL, 2014-2100", "NULL, 1-50", "NOT NULL", "NOT NULL, FOREIGN KEY → teams", "NOT NULL, FOREIGN KEY → teams", "NOT NULL, DEFAULT 0, ≥ 0", "NOT NULL, DEFAULT 0, ≥ 0", "NULL, 0.0000-1.0000", "NULL, 0.0000-1.0000", "NULL, 0.0000-1.0000", "NULL, ≥ 0", "NULL, ≥ 0", "NOT NULL, DEFAULT 'completed'", "NOT NULL, DEFAULT CURRENT_TIMESTAMP", "NOT NULL, DEFAULT CURRENT_TIMESTAMP"],
+            "Description": ["Auto-generated primary key", "League reference", "Starting season year", "Match week/round number", "Match date/time", "Home team reference", "Away team reference", "Home goals scored (full time)", "Away goals scored (full time)", "Pre-match win probability", "Pre-match draw probability", "Pre-match away probability", "Home goals at half time", "Away goals at half time", "Match status", "Creation timestamp", "Last modification timestamp"]
+        }
+        st.dataframe(pd.DataFrame(games_data), use_container_width=True, hide_index=True)
+
+        st.markdown("**Relationships:** Central hub, referenced by all other transaction tables")
+        st.markdown("**Analytics:** Core for match results, seasonal trends, prediction models")
+        st.markdown("---")
+
+        # Show expandable sections for remaining tables
+        with st.expander("📈 View team_stats Table Documentation"):
+            col1, col2 = st.columns([1, 4])
             with col1:
-                st.image("https://img.icons8.com/color/96/000000/football2--v1.png", width=80)
+                st.markdown("📈 **team_stats**")
             with col2:
-                st.markdown("#### 🎮 **games** (Central Fact Table)")
-                st.markdown("""
-                **Purpose:** Complete match information - the heart of the database.
+                st.markdown("*Granular team performance data for each match appearance*")
 
-                **Key Columns:**
-                - `game_id` (PK): Unique match identifier
-                - `league_id` (FK): Associated league
-                - `season`: Match season year
-                - `date`: Match date and time
-                - `home_team_id/away_team_id` (FK): Participating teams
-                - `home_goals/away_goals`: Final score
-                - `*_probability`: Pre-match win probabilities
+            team_stats_data = {
+                "Attribute": ["game_id, team_id", "location", "goals", "x_goals", "shots", "shots_on_target", "deep_passes", "ppda", "fouls", "corners", "yellow_cards", "red_cards", "result", "created_at", "updated_at"],
+                "Type": ["INTEGER, INTEGER", "location_type ENUM", "SMALLINT", "DECIMAL(8,6)", "SMALLINT", "SMALLINT", "INTEGER", "DECIMAL(8,4)", "SMALLINT", "SMALLINT", "SMALLINT", "SMALLINT", "result_type ENUM", "TIMESTAMP", "TIMESTAMP"],
+                "Description": ["Composite PRIMARY KEY", "home or away", "Goals scored in match", "Expected goals metric", "Total shots attempted", "Shots on target", "Completed deep passes", "Passes per defensive action", "Fouls committed", "Corners won", "Yellow cards received", "Red cards received", "win, draw, or loss", "Creation timestamp", "Last modification timestamp"]
+            }
+            st.dataframe(pd.DataFrame(team_stats_data), use_container_width=True, hide_index=True)
+            st.markdown("**Relationships:** References `games.game_id`, `teams.team_id`")
 
-                **Relationships:** Central hub connecting to all other tables
-                """)
-
-        # Team Stats Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
+        with st.expander("🏃 View appearances Table Documentation"):
+            col1, col2 = st.columns([1, 4])
             with col1:
-                st.image("https://img.icons8.com/color/96/000000/statistics.png", width=80)
+                st.markdown("🏃 **appearances**")
             with col2:
-                st.markdown("#### 📈 **team_stats**")
-                st.markdown("""
-                **Purpose:** Detailed team performance metrics for each match.
+                st.markdown("*Individual player statistics for each match appearance*")
 
-                **Key Columns:**
-                - `game_id, team_id` (Composite PK): Match-team combination
-                - `location`: Home ('h') or Away ('a')
-                - `goals/x_goals`: Actual vs expected goals
-                - `shots/shots_on_target`: Shooting statistics
-                - `result`: Match result (W/D/L)
-                - Advanced metrics: `ppda`, `deep_passes`, `fouls`, cards
+            appearances_data = {
+                "Attribute": ["game_id, player_id", "team_id", "goals", "own_goals", "shots", "x_goals", "x_goals_chain", "x_goals_buildup", "assists", "key_passes", "x_assists", "position", "position_order", "yellow_card", "red_card", "time_played", "substitute_in", "substitute_out", "created_at", "updated_at"],
+                "Type": ["INTEGER, INTEGER", "INTEGER", "SMALLINT", "SMALLINT", "SMALLINT", "DECIMAL(8,6)", "DECIMAL(8,6)", "DECIMAL(8,6)", "SMALLINT", "SMALLINT", "DECIMAL(8,6)", "VARCHAR(10)", "SMALLINT", "BOOLEAN", "BOOLEAN", "SMALLINT", "VARCHAR(20)", "VARCHAR(20)", "TIMESTAMP", "TIMESTAMP"],
+                "Description": ["Composite PRIMARY KEY", "Team player represented", "Goals scored", "Own goals", "Shots attempted", "Expected goals", "xG in possession chains", "xG in buildup plays", "Goal assists", "Key passes", "Expected assists", "Playing position", "Field position order", "Yellow card received", "Red card received", "Minutes played", "Substitute in time", "Substitute out time", "Creation timestamp", "Last modification timestamp"]
+            }
+            st.dataframe(pd.DataFrame(appearances_data), use_container_width=True, hide_index=True)
+            st.markdown("**Relationships:** References `games.game_id`, `players.player_id`")
 
-                **Relationships:** Depends on `games` and `teams` tables
-                """)
-
-        # Appearances Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
+        with st.expander("🎯 View shots Table Documentation"):
+            col1, col2 = st.columns([1, 4])
             with col1:
-                st.image("https://img.icons8.com/color/96/000000/running.png", width=80)
+                st.markdown("🎯 **shots**")
             with col2:
-                st.markdown("#### 🏃 **appearances**")
-                st.markdown("""
-                **Purpose:** Individual player performance data for each match appearance.
+                st.markdown("*Granular shot data with positioning and expected goal probabilities*")
 
-                **Key Columns:**
-                - `game_id, player_id` (Composite PK): Match-player appearance
-                - `goals/assists`: Scoring contributions
-                - `shots/x_goals`: Shooting metrics
-                - `time_played`: Minutes on field
-                - Advanced: `x_assists`, `key_passes`, `position`
+            shots_data = {
+                "Attribute": ["shot_id", "game_id", "team_id", "shooter_id", "assister_id", "minute", "situation", "last_action", "shot_type", "shot_result", "x_goal", "position_x", "position_y", "created_at"],
+                "Type": ["BIGSERIAL", "INTEGER", "INTEGER", "INTEGER", "INTEGER", "SMALLINT", "shot_situation_type ENUM", "VARCHAR(50)", "VARCHAR(50)", "shot_result_type ENUM", "DECIMAL(8,6)", "DECIMAL(10,8)", "DECIMAL(10,8)", "TIMESTAMP"],
+                "Description": ["Auto-generated PRIMARY KEY", "Game reference", "Team that took shot", "Player who shot", "Assist provider", "Match minute", "Shot situation", "Last action before shot", "Shot type (Right Foot, Header, etc.)", "Shot result (Goal, Saved, etc.)", "Expected goal probability", "Pitch X coordinate (0-1)", "Pitch Y coordinate (0-1)", "Creation timestamp"]
+            }
+            st.dataframe(pd.DataFrame(shots_data), use_container_width=True, hide_index=True)
+            st.markdown("**Relationships:** References `games.game_id`, `players.shooter_id/assister_id`")
 
-                **Relationships:** Links `games` and `players` with detailed statistics
-                """)
 
-        # Shots Table
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.image("https://img.icons8.com/color/96/000000/target.png", width=80)
-            with col2:
-                st.markdown("#### 🎯 **shots**")
-                st.markdown("""
-                **Purpose:** Granular shot-by-shot data for advanced analytics.
-
-                **Key Columns:**
-                - `shot_id` (PK): Unique shot identifier
-                - `game_id` (FK): Associated match
-                - `shooter_id/assister_id` (FK): Players involved
-                - Shot data: `situation`, `shot_type`, `shot_result`
-                - Precision data: `x_goal`, `position_x/y`, `minute`
-
-                **Relationships:** Detailed extension of match and player data
-                """)
 
         st.markdown("---")
 
