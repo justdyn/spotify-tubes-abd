@@ -177,7 +177,7 @@ CREATE TEMP TABLE players_temp (
 );
 
 -- Import players CSV
-\copy players_temp FROM 'players.csv' WITH (FORMAT CSV, HEADER true, DELIMITER ',');
+\copy players_temp FROM 'players_utf8.csv' WITH (FORMAT CSV, HEADER true, DELIMITER ',');
 
 -- Insert players
 -- Note: player_id is SERIAL, but we preserve CSV IDs for mapping

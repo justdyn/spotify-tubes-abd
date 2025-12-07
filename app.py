@@ -462,24 +462,7 @@ def get_teams_by_country():
     """
     return execute_query(query)
 
-def get_player_nationalities():
-    """Get player distribution by nationality"""
-    query = """
-    SELECT 
-        COALESCE(p.nationality, 'Unknown') as nationality,
-        COUNT(DISTINCT p.player_id) as player_count,
-        SUM(a.goals) as total_goals,
-        SUM(a.assists) as total_assists,
-        COUNT(DISTINCT a.game_id) as total_appearances
-    FROM players p
-    LEFT JOIN appearances a ON p.player_id = a.player_id
-    WHERE p.is_active = true
-    GROUP BY p.nationality
-    HAVING COUNT(DISTINCT p.player_id) >= 5
-    ORDER BY player_count DESC
-    LIMIT 30
-    """
-    return execute_query(query)
+
 
 def get_league_teams_map():
     """Get teams with their league countries for mapping"""
@@ -858,94 +841,7 @@ def plot_leagues_choropleth():
     
     return fig
 
-def plot_player_nationalities_map(df):
-    """Create map showing player nationalities distribution"""
-    if df.empty:
-        return None
 
-    # Map common nationalities to coordinates (approximate)
-    nationality_coords = {
-        'England': {'lat': 52.3555, 'lon': -1.1743},
-        'Spain': {'lat': 40.4637, 'lon': -3.7492},
-        'Germany': {'lat': 51.1657, 'lon': 10.4515},
-        'Italy': {'lat': 41.8719, 'lon': 12.5674},
-        'France': {'lat': 46.2276, 'lon': 2.2137},
-        'Brazil': {'lat': -14.2350, 'lon': -51.9253},
-        'Argentina': {'lat': -38.4161, 'lon': -63.6167},
-        'Portugal': {'lat': 39.3999, 'lon': -8.2245},
-        'Netherlands': {'lat': 52.1326, 'lon': 5.2913},
-        'Belgium': {'lat': 50.5039, 'lon': 4.4699},
-        'Croatia': {'lat': 45.1, 'lon': 15.2},
-        'Serbia': {'lat': 44.0165, 'lon': 21.0059},
-        'Poland': {'lat': 51.9194, 'lon': 19.1451},
-        'Uruguay': {'lat': -32.5228, 'lon': -55.7658},
-        'Colombia': {'lat': 4.5709, 'lon': -74.2973},
-        'Senegal': {'lat': 14.4974, 'lon': -14.4524},
-        'Nigeria': {'lat': 9.0820, 'lon': 8.6753},
-        'Ghana': {'lat': 7.9465, 'lon': -1.0232},
-        'Ivory Coast': {'lat': 7.5400, 'lon': -5.5471},
-        'Morocco': {'lat': 31.7917, 'lon': -7.0926},
-        'Algeria': {'lat': 28.0339, 'lon': 1.6596},
-        'Japan': {'lat': 36.2048, 'lon': 138.2529},
-        'South Korea': {'lat': 35.9078, 'lon': 127.7669},
-        'Mexico': {'lat': 23.6345, 'lon': -102.5528},
-        'Chile': {'lat': -35.6751, 'lon': -71.5430},
-        'Denmark': {'lat': 56.2639, 'lon': 9.5018},
-        'Sweden': {'lat': 60.1282, 'lon': 18.6435},
-        'Norway': {'lat': 60.4720, 'lon': 8.4689},
-        'Austria': {'lat': 47.5162, 'lon': 14.5501},
-        'Switzerland': {'lat': 46.8182, 'lon': 8.2275},
-    }
-
-    # Add coordinates
-    df['lat'] = df['nationality'].map(lambda x: nationality_coords.get(x, {}).get('lat', None))
-    df['lon'] = df['nationality'].map(lambda x: nationality_coords.get(x, {}).get('lon', None))
-
-    # Filter out unknown coordinates
-    df_mapped = df[df['lat'].notna()].copy()
-
-    if df_mapped.empty:
-        return None
-
-    fig = px.scatter_geo(
-        df_mapped,
-        lat='lat',
-        lon='lon',
-        size='player_count',
-        color='total_goals',
-        hover_name='nationality',
-        hover_data={
-            'player_count': True,
-            'total_goals': True,
-            'total_assists': True,
-            'total_appearances': True,
-            'lat': False,
-            'lon': False
-        },
-        title='Player Nationalities Distribution',
-        color_continuous_scale='Plasma',
-        size_max=40
-    )
-
-    fig.update_geos(
-        projection_type='natural earth',
-        showland=True,
-        landcolor='rgb(243, 243, 243)',
-        coastlinecolor='rgb(204, 204, 204)',
-        showlakes=True,
-        lakecolor='rgb(230, 245, 255)',
-        showcountries=True,
-        countrycolor='rgb(204, 204, 204)',
-        bgcolor='rgba(0,0,0,0)'
-    )
-
-    fig.update_layout(
-        template='plotly_white',
-        height=600,
-        margin=dict(l=0, r=0, t=40, b=0)
-    )
-
-    return fig
 
 def create_interactive_erd_html():
     """Create interactive HTML-based ERD that can be zoomed and panned"""
@@ -999,6 +895,8 @@ def create_interactive_erd_html():
             .table-master { border-color: #1f77b4; background: linear-gradient(135deg, #e8f4fd 0%, #b3d9ff 100%); }
             .table-fact { border-color: #ff7f0e; background: linear-gradient(135deg, #fff2e6 0%, #ffcc99 100%); }
             .table-stats { border-color: #2ca02c; background: linear-gradient(135deg, #e8f5e8 0%, #b3ffb3 100%); }
+
+            .table-bridge { border-color: #9b59b6; background: linear-gradient(135deg, #e8daff 0%, #ffccff 100%); }
 
             .table-icon {
                 font-size: 24px;
@@ -1146,6 +1044,10 @@ def create_interactive_erd_html():
                 <div class="legend-item">
                     <div class="legend-color" style="background: linear-gradient(135deg, #e8f5e8 0%, #b3ffb3 100%); border-color: #2ca02c;"></div>
                     <span><strong>Statistics Tables</strong></span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #e8daff 0%, #ffccff 100%); border-color: #9b59b6;"></div>
+                    <span><strong>Bridge Tables</strong></span>
                 </div>
             </div>
 
@@ -1865,9 +1767,9 @@ def main():
                 st.markdown("*Granular team performance data for each match appearance*")
 
             team_stats_data = {
-                "Attribute": ["game_id, team_id", "location", "goals", "x_goals", "shots", "shots_on_target", "deep_passes", "ppda", "fouls", "corners", "yellow_cards", "red_cards", "result", "created_at", "updated_at"],
-                "Type": ["INTEGER, INTEGER", "location_type ENUM", "SMALLINT", "DECIMAL(8,6)", "SMALLINT", "SMALLINT", "INTEGER", "DECIMAL(8,4)", "SMALLINT", "SMALLINT", "SMALLINT", "SMALLINT", "result_type ENUM", "TIMESTAMP", "TIMESTAMP"],
-                "Description": ["Composite PRIMARY KEY", "home or away", "Goals scored in match", "Expected goals metric", "Total shots attempted", "Shots on target", "Completed deep passes", "Passes per defensive action", "Fouls committed", "Corners won", "Yellow cards received", "Red cards received", "win, draw, or loss", "Creation timestamp", "Last modification timestamp"]
+                "Attribute": ["team_stat_id", "game_id", "team_id", "location", "goals", "x_goals", "shots", "shots_on_target", "deep_passes", "ppda", "fouls", "corners", "yellow_cards", "red_cards", "result", "created_at", "updated_at"],
+                "Type": ["SERIAL", "INTEGER", "INTEGER", "location_type ENUM", "SMALLINT", "DECIMAL(8,6)", "SMALLINT", "SMALLINT", "INTEGER", "DECIMAL(8,4)", "SMALLINT", "SMALLINT", "SMALLINT", "SMALLINT", "result_type ENUM", "TIMESTAMP", "TIMESTAMP"],
+                "Description": ["Auto-generated PRIMARY KEY", "Game reference", "Team reference", "home or away", "Goals scored in match", "Expected goals metric", "Total shots attempted", "Shots on target", "Completed deep passes", "Passes per defensive action", "Fouls committed", "Corners won", "Yellow cards received", "Red cards received", "win, draw, or loss", "Creation timestamp", "Last modification timestamp"]
             }
             st.dataframe(pd.DataFrame(team_stats_data), use_container_width=True, hide_index=True)
             st.markdown("**Relationships:** References `games.game_id`, `teams.team_id`")
@@ -1880,9 +1782,10 @@ def main():
                 st.markdown("*Individual player statistics for each match appearance*")
 
             appearances_data = {
-                "Attribute": ["game_id, player_id", "team_id", "goals", "own_goals", "shots", "x_goals", "x_goals_chain", "x_goals_buildup", "assists", "key_passes", "x_assists", "position", "position_order", "yellow_card", "red_card", "time_played", "substitute_in", "substitute_out", "created_at", "updated_at"],
-                "Type": ["INTEGER, INTEGER", "INTEGER", "SMALLINT", "SMALLINT", "SMALLINT", "DECIMAL(8,6)", "DECIMAL(8,6)", "DECIMAL(8,6)", "SMALLINT", "SMALLINT", "DECIMAL(8,6)", "VARCHAR(10)", "SMALLINT", "BOOLEAN", "BOOLEAN", "SMALLINT", "VARCHAR(20)", "VARCHAR(20)", "TIMESTAMP", "TIMESTAMP"],
-                "Description": ["Composite PRIMARY KEY", "Team player represented", "Goals scored", "Own goals", "Shots attempted", "Expected goals", "xG in possession chains", "xG in buildup plays", "Goal assists", "Key passes", "Expected assists", "Playing position", "Field position order", "Yellow card received", "Red card received", "Minutes played", "Substitute in time", "Substitute out time", "Creation timestamp", "Last modification timestamp"]
+                "Attribute": ["appearance_id", "game_id", "player_id", "team_id", "goals", "own_goals", "shots", "x_goals", "x_goals_chain", "x_goals_buildup", "assists", "key_passes", "x_assists", "position", "position_order", "yellow_card", "red_card", "time_played", "created_at", "updated_at"],
+                "Type": ["SERIAL", "INTEGER", "INTEGER", "INTEGER", "SMALLINT", "SMALLINT", "SMALLINT", "DECIMAL(8,6)", "DECIMAL(8,6)", "DECIMAL(8,6)", "SMALLINT", "SMALLINT", "DECIMAL(8,6)", "VARCHAR(10)", "SMALLINT", "BOOLEAN", "BOOLEAN", "SMALLINT", "TIMESTAMP", "TIMESTAMP"],
+                "Constraints": ["PRIMARY KEY", "NOT NULL, FOREIGN KEY → games", "NOT NULL, FOREIGN KEY → players", "NOT NULL, FOREIGN KEY → teams", "NOT NULL, DEFAULT 0", "NOT NULL, DEFAULT 0", "NOT NULL, DEFAULT 0", "NULL", "NULL", "NULL", "NOT NULL, DEFAULT 0", "NOT NULL, DEFAULT 0", "NULL", "NULL", "NULL", "NOT NULL, DEFAULT false", "NOT NULL, DEFAULT false", "NOT NULL, DEFAULT 0", "NOT NULL, DEFAULT CURRENT_TIMESTAMP", "NOT NULL, DEFAULT CURRENT_TIMESTAMP"],
+                "Description": ["Auto-generated PRIMARY KEY", "Game reference", "Player reference", "Team player represented", "Goals scored", "Own goals", "Shots attempted", "Expected goals", "xG in possession chains", "xG in buildup plays", "Goal assists", "Key passes", "Expected assists", "Playing position", "Field position order", "Yellow card received", "Red card received", "Minutes played", "Creation timestamp", "Last modification timestamp"]
             }
             st.dataframe(pd.DataFrame(appearances_data), use_container_width=True, hide_index=True)
             st.markdown("**Relationships:** References `games.game_id`, `players.player_id`")
