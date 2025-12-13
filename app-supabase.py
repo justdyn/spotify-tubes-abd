@@ -5,7 +5,7 @@ A comprehensive data visualization application for analyzing European football d
 from Premier League, La Liga, Bundesliga, Serie A, and Ligue 1.
 
 Author: Senior Data Scientist & Streamlit Developer
-Database: PostgreSQL (laliga_europe)
+Database: Supabase (PostgreSQL)
 """
 
 import streamlit as st
@@ -15,8 +15,11 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import pool
 import numpy as np
 from datetime import datetime
+import os
+from urllib.parse import urlparse
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -190,27 +193,159 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# DATABASE CONNECTION
+# DATABASE CONNECTION - SUPABASE
 # ============================================================================
+
+def get_supabase_connection_params():
+    """
+    Retrieve Supabase connection parameters from Streamlit secrets.
+    Supports both connection string and individual parameters.
+    
+    Streamlit Secrets Configuration:
+        [connections.supabase]
+        SUPABASE_URL = "https://xxxxx.supabase.co"
+        SUPABASE_KEY = "your-anon-key"
+        
+        # OR use database connection string:
+        SUPABASE_DB_URL = "postgresql://postgres.xxxxx:password@db.xxxxx.supabase.co:5432/postgres"
+        
+        # OR individual database parameters:
+        SUPABASE_DB_HOST = "db.xxxxx.supabase.co"
+        SUPABASE_DB_PORT = "5432"  # or "6543" for connection pooler
+        SUPABASE_DB_NAME = "postgres"
+        SUPABASE_DB_USER = "postgres.xxxxx"
+        SUPABASE_DB_PASSWORD = "your-password"
+    
+    Returns:
+        dict: Connection parameters for psycopg2
+    """
+    # Try connection string first (highest priority)
+    try:
+        db_url = st.secrets.get("connections", {}).get("supabase", {}).get("SUPABASE_DB_URL")
+        if not db_url:
+            db_url = st.secrets.get("SUPABASE_DB_URL")
+        
+        if db_url:
+            try:
+                parsed = urlparse(db_url)
+                return {
+                    'host': parsed.hostname,
+                    'port': parsed.port or 5432,
+                    'database': parsed.path.lstrip('/') or 'postgres',
+                    'user': parsed.username,
+                    'password': parsed.password
+                }
+            except Exception as e:
+                st.warning(f"⚠️ Error parsing SUPABASE_DB_URL: {e}. Falling back to individual parameters.")
+    except:
+        pass
+    
+    # Fall back to individual parameters
+    try:
+        supabase_config = st.secrets.get("connections", {}).get("supabase", {})
+        host = supabase_config.get("SUPABASE_DB_HOST") or st.secrets.get("SUPABASE_DB_HOST")
+        port = supabase_config.get("SUPABASE_DB_PORT") or st.secrets.get("SUPABASE_DB_PORT", "5432")
+        database = supabase_config.get("SUPABASE_DB_NAME") or st.secrets.get("SUPABASE_DB_NAME", "postgres")
+        user = supabase_config.get("SUPABASE_DB_USER") or st.secrets.get("SUPABASE_DB_USER")
+        password = supabase_config.get("SUPABASE_DB_PASSWORD") or st.secrets.get("SUPABASE_DB_PASSWORD")
+    except:
+        # Try direct secrets access
+        host = st.secrets.get("SUPABASE_DB_HOST", None)
+        port = st.secrets.get("SUPABASE_DB_PORT", "5432")
+        database = st.secrets.get("SUPABASE_DB_NAME", "postgres")
+        user = st.secrets.get("SUPABASE_DB_USER", None)
+        password = st.secrets.get("SUPABASE_DB_PASSWORD", None)
+    
+    # Validate required parameters
+    if not all([host, user, password]):
+        missing = [k for k, v in {
+            'SUPABASE_DB_HOST': host,
+            'SUPABASE_DB_USER': user,
+            'SUPABASE_DB_PASSWORD': password
+        }.items() if not v]
+        
+        st.error(f"❌ Missing required Supabase connection parameters: {', '.join(missing)}")
+        st.info("""
+        **📋 Setup Instructions:**
+        
+        **Option 1: Connection String (Recommended)**
+        Add to `.streamlit/secrets.toml` (local) or Streamlit Cloud Secrets:
+        ```toml
+        [connections.supabase]
+        SUPABASE_DB_URL = "postgresql://postgres.xxxxx:password@db.xxxxx.supabase.co:5432/postgres"
+        ```
+        
+        **Option 2: Individual Parameters**
+        ```toml
+        [connections.supabase]
+        SUPABASE_DB_HOST = "db.xxxxx.supabase.co"
+        SUPABASE_DB_PORT = "5432"  # or "6543" for connection pooler (recommended)
+        SUPABASE_DB_NAME = "postgres"
+        SUPABASE_DB_USER = "postgres.xxxxx"
+        SUPABASE_DB_PASSWORD = "your-password"
+        ```
+        
+        **🔍 Where to find these:**
+        1. Go to Supabase Dashboard → Settings → Database
+        2. Find "Connection string" section
+        3. Copy the connection parameters or URI
+        
+        **💡 For Streamlit Cloud:**
+        Add these as secrets in your Streamlit app settings (Edit Secrets).
+        """)
+        st.stop()
+    
+    return {
+        'host': host,
+        'port': int(port),
+        'database': database,
+        'user': user,
+        'password': password
+    }
 
 @st.cache_resource
 def get_database_connection():
     """
-    Establish connection to PostgreSQL database with connection pooling.
+    Establish connection to Supabase PostgreSQL database with connection pooling.
     Uses st.cache_resource to maintain connection across reruns.
+    
+    For production deployments, consider using Supabase's connection pooler
+    (port 6543) for better performance and connection management.
     """
     try:
+        params = get_supabase_connection_params()
+        
+        # Add connection parameters for better reliability
         conn = psycopg2.connect(
-            host="localhost",
-            database="laliga_europe",
-            user="postgres",
-            password="1",
-            port="5432"
+            host=params['host'],
+            port=params['port'],
+            database=params['database'],
+            user=params['user'],
+            password=params['password'],
+            connect_timeout=10,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5
         )
+        
+        # Set connection to autocommit mode for better performance
+        conn.autocommit = False
+        
         return conn
-    except Exception as e:
+    except psycopg2.OperationalError as e:
         st.error(f"❌ Database Connection Error: {str(e)}")
-        st.info("Please ensure PostgreSQL is running and the database 'laliga_europe' exists.")
+        st.info("""
+        **Troubleshooting:**
+        1. Verify your Supabase project is active
+        2. Check that your IP is allowed (if IP restrictions are enabled)
+        3. For pooler connections, ensure you're using port 6543
+        4. Verify your credentials in Supabase Dashboard → Settings → Database
+        """)
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Unexpected Connection Error: {str(e)}")
+        st.info("Please check your Supabase connection settings and try again.")
         st.stop()
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -218,14 +353,29 @@ def execute_query(query, params=None):
     """
     Execute SQL query and return results as DataFrame.
     Implements caching for better performance.
+    
+    Args:
+        query: SQL query string
+        params: Optional query parameters (tuple or dict)
+    
+    Returns:
+        pd.DataFrame: Query results or empty DataFrame on error
     """
     conn = get_database_connection()
     try:
         df = pd.read_sql_query(query, conn, params=params)
         return df
-    except Exception as e:
-        st.error(f"Query Error: {str(e)}")
+    except psycopg2.Error as e:
+        st.error(f"❌ Database Query Error: {str(e)}")
+        st.caption(f"Query: {query[:100]}..." if len(query) > 100 else f"Query: {query}")
         return pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Unexpected Query Error: {str(e)}")
+        return pd.DataFrame()
+    finally:
+        # Note: We don't close the connection here as it's cached
+        # The connection will be reused for subsequent queries
+        pass
 
 # ============================================================================
 # DATA FETCHING FUNCTIONS
@@ -1216,7 +1366,16 @@ def main():
         st.subheader("Database Status")
         try:
             conn = get_database_connection()
-            st.success("✅ Connected")
+            # Test connection with a simple query
+            cursor = conn.cursor()
+            cursor.execute("SELECT version();")
+            version = cursor.fetchone()[0]
+            cursor.close()
+            st.success("✅ Connected to Supabase")
+            st.caption(f"PostgreSQL: {version.split(',')[0]}")
+        except Exception as e:
+            st.error("❌ Disconnected")
+            st.caption(f"Error: {str(e)[:50]}...")
         except:
             st.error("❌ Disconnected")
     
@@ -1902,8 +2061,8 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #7f8c8d; padding: 20px;'>
-        <p>⚽ European Top 5 Leagues Dashboard | Built with Streamlit & PostgreSQL</p>
-        <p>Data Source: laliga_europe Database | © 2024</p>
+        <p>⚽ European Top 5 Leagues Dashboard | Built with Streamlit & Supabase</p>
+        <p>Data Source: Supabase PostgreSQL Database | © 2024</p>
     </div>
     """, unsafe_allow_html=True)
 

@@ -1,0 +1,11 @@
+.env
+.streamlit/secrets.toml
+QUICK_START_SUPABASE.md
+README_SUPABASE.md
+SUPABASE_COMPLETE_GUIDE.md
+SUPABASE_IMPORT_GUIDE.md
+
+penjelasan-postgresql.md
+penjelasan-postgresql.pdf
+
+laliga_europe.dump
