@@ -1,5 +1,7 @@
-streamlit==1.29.0
-pandas==2.1.4
-plotly==5.18.0
-psycopg2-binary==2.9.9
-numpy==1.26.2
+# Compatible with Python 3.12 and 3.13
+# If Python 3.13 is used, ensure psycopg2-binary>=2.9.10 has wheels
+streamlit>=1.29.0
+pandas>=2.2.0
+plotly>=5.18.0
+psycopg2-binary>=2.9.9
+numpy>=1.26.0,<2.0.0
